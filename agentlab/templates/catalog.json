@@ -1,0 +1,176 @@
+{
+ "landing": {
+  "kind": "website",
+  "name": "Landing page",
+  "description": "A clean product landing page with hero, features, pricing and contact.",
+  "tags": [
+   "business"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Product</title><link rel=stylesheet href=style.css>\n<body><header class=wrap style=\"display:flex;justify-content:space-between;align-items:center;padding:18px 22px\"><b>Product</b><nav><a href=#features>Features</a> \u00b7 <a href=#pricing>Pricing</a></nav></header>\n<section class=\"wrap\" style=\"text-align:center\"><h1>Do more with less.</h1><p style=\"font-size:1.3rem;color:#6e6e73\">A short sentence that says what your product does and who it is for.</p><a class=btn href=#pricing>Get started</a></section>\n<section id=features class=wrap><div class=grid><div class=card><h3>Fast</h3><p>Explain the first benefit.</p></div><div class=card><h3>Simple</h3><p>Explain the second benefit.</p></div><div class=card><h3>Private</h3><p>Explain the third benefit.</p></div></div></section>\n<section id=pricing class=wrap><div class=grid><div class=card><h3>Free</h3><p><b style=\"font-size:2rem\">$0</b></p><p>For trying it out.</p></div><div class=card><h3>Pro</h3><p><b style=\"font-size:2rem\">$9</b>/month</p><p>For individuals.</p></div><div class=card><h3>Team</h3><p><b style=\"font-size:2rem\">$29</b>/month</p><p>For small teams.</p></div></div></section>\n<section class=wrap style=\"text-align:center\"><h2>Questions?</h2><p><a href=\"mailto:hello@example.com\">hello@example.com</a></p></section></body></html>",
+   "style.css": "*{box-sizing:border-box}body{margin:0;font:17px/1.6 -apple-system,system-ui,Segoe UI,sans-serif;color:#1d1d1f;background:#fff}\n@media(prefers-color-scheme:dark){body{color:#f5f5f7;background:#000}.card{background:#1c1c1e!important}}\n.wrap{max-width:980px;margin:0 auto;padding:0 22px}a{color:#0071e3}\n.btn{display:inline-block;padding:12px 22px;border-radius:980px;background:#0071e3;color:#fff;text-decoration:none;font-weight:600}\n.card{background:#f5f5f7;border-radius:18px;padding:24px}.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}\nh1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.05;letter-spacing:-.02em;margin:.2em 0}section{padding:72px 0}\n"
+  }
+ },
+ "portfolio": {
+  "kind": "website",
+  "name": "Portfolio",
+  "description": "A personal portfolio with projects grid and about section.",
+  "tags": [
+   "personal"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Your Name</title><link rel=stylesheet href=style.css>\n<body><section class=wrap><h1>Hi, I'm Your Name.</h1><p style=\"font-size:1.3rem;color:#6e6e73\">Designer and developer. I build calm, useful things.</p></section>\n<section class=wrap><h2>Work</h2><div class=grid id=work></div></section><section class=wrap><h2>About</h2><p>A few lines about you.</p></section>\n<script>const work=[[\"Project one\",\"What it is and what you did.\"],[\"Project two\",\"What it is and what you did.\"],[\"Project three\",\"What it is and what you did.\"]];\ndocument.getElementById('work').innerHTML=work.map(([t,d])=>`<div class=card><h3>${t}</h3><p>${d}</p></div>`).join('')</script></body></html>",
+   "style.css": "*{box-sizing:border-box}body{margin:0;font:17px/1.6 -apple-system,system-ui,Segoe UI,sans-serif;color:#1d1d1f;background:#fff}\n@media(prefers-color-scheme:dark){body{color:#f5f5f7;background:#000}.card{background:#1c1c1e!important}}\n.wrap{max-width:980px;margin:0 auto;padding:0 22px}a{color:#0071e3}\n.btn{display:inline-block;padding:12px 22px;border-radius:980px;background:#0071e3;color:#fff;text-decoration:none;font-weight:600}\n.card{background:#f5f5f7;border-radius:18px;padding:24px}.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}\nh1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.05;letter-spacing:-.02em;margin:.2em 0}section{padding:72px 0}\n"
+  }
+ },
+ "blog": {
+  "kind": "website",
+  "name": "Blog",
+  "description": "A minimal blog: posts written in a JS list, rendered client-side, no build step.",
+  "tags": [
+   "writing"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Blog</title><link rel=stylesheet href=style.css>\n<body><div class=wrap style=\"max-width:680px\"><header style=\"padding:40px 0\"><h1 style=\"font-size:2.4rem\">My blog</h1></header><main id=main></main></div>\n<script src=posts.js></script><script>\nconst main=document.getElementById('main');const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));\nfunction show(){const id=location.hash.slice(1);const p=POSTS.find(p=>p.id===id);\nmain.innerHTML=p?`<a href=#>\u2190 All posts</a><h2>${esc(p.title)}</h2><p style=\"color:#6e6e73\">${p.date}</p>${p.body.split('\\n\\n').map(x=>`<p>${esc(x)}</p>`).join('')}`\n:POSTS.map(p=>`<article style=\"margin:0 0 28px\"><a href=#${p.id}><h2 style=\"margin:0\">${esc(p.title)}</h2></a><small>${p.date}</small><p>${esc(p.body.slice(0,140))}\u2026</p></article>`).join('')}\naddEventListener('hashchange',show);show()</script></body></html>",
+   "posts.js": "const POSTS=[{id:\"hello\",title:\"Hello, world\",date:\"2026-01-01\",body:\"This is the first post.\\n\\nWrite posts in posts.js.\"},{id:\"second\",title:\"A second post\",date:\"2026-01-08\",body:\"Another post.\\n\\nParagraphs are separated by blank lines.\"}];",
+   "style.css": "*{box-sizing:border-box}body{margin:0;font:17px/1.6 -apple-system,system-ui,Segoe UI,sans-serif;color:#1d1d1f;background:#fff}\n@media(prefers-color-scheme:dark){body{color:#f5f5f7;background:#000}.card{background:#1c1c1e!important}}\n.wrap{max-width:980px;margin:0 auto;padding:0 22px}a{color:#0071e3}\n.btn{display:inline-block;padding:12px 22px;border-radius:980px;background:#0071e3;color:#fff;text-decoration:none;font-weight:600}\n.card{background:#f5f5f7;border-radius:18px;padding:24px}.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}\nh1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.05;letter-spacing:-.02em;margin:.2em 0}section{padding:72px 0}\n"
+  }
+ },
+ "docs-site": {
+  "kind": "website",
+  "name": "Documentation site",
+  "description": "Sidebar documentation site with search, pages in one JS file.",
+  "tags": [
+   "docs"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Docs</title><link rel=stylesheet href=style.css>\n<style>.l{display:grid;grid-template-columns:240px 1fr;gap:32px;max-width:1100px;margin:0 auto;padding:24px}@media(max-width:700px){.l{grid-template-columns:1fr}}nav a{display:block;padding:6px 0}input{width:100%;padding:9px 12px;border-radius:10px;border:1px solid #ccc;font:inherit}</style>\n<body><div class=l><aside><input id=q placeholder=\"Search\"><nav id=nav></nav></aside><main id=page></main></div><script src=pages.js></script><script>\nconst nav=document.getElementById('nav'),page=document.getElementById('page'),q=document.getElementById('q');\nfunction list(){const s=q.value.toLowerCase();nav.innerHTML=PAGES.filter(p=>(p.title+p.body).toLowerCase().includes(s)).map(p=>`<a href=#${p.id}>${p.title}</a>`).join('')}\nfunction show(){const p=PAGES.find(p=>p.id===location.hash.slice(1))||PAGES[0];page.innerHTML=`<h1 style=\"font-size:2rem\">${p.title}</h1>`+p.body}\nq.oninput=list;addEventListener('hashchange',show);list();show()</script></body></html>",
+   "pages.js": "const PAGES=[{id:\"intro\",title:\"Introduction\",body:\"<p>What this project is.</p>\"},{id:\"install\",title:\"Installation\",body:\"<pre>pip install yourthing</pre>\"},{id:\"usage\",title:\"Usage\",body:\"<p>How to use it.</p>\"}];",
+   "style.css": "*{box-sizing:border-box}body{margin:0;font:17px/1.6 -apple-system,system-ui,Segoe UI,sans-serif;color:#1d1d1f;background:#fff}\n@media(prefers-color-scheme:dark){body{color:#f5f5f7;background:#000}.card{background:#1c1c1e!important}}\n.wrap{max-width:980px;margin:0 auto;padding:0 22px}a{color:#0071e3}\n.btn{display:inline-block;padding:12px 22px;border-radius:980px;background:#0071e3;color:#fff;text-decoration:none;font-weight:600}\n.card{background:#f5f5f7;border-radius:18px;padding:24px}.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}\nh1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.05;letter-spacing:-.02em;margin:.2em 0}section{padding:72px 0}\n"
+  }
+ },
+ "snake": {
+  "kind": "game",
+  "name": "Snake",
+  "description": "Classic snake with score, speed-up and high score (arrow keys or swipe).",
+  "tags": [
+   "arcade"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Snake</title>\n<style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#111;color:#eee;font:16px system-ui}canvas{background:#000;border-radius:12px;max-width:96vw;touch-action:none}p{opacity:.7}</style>\n<body><div style=\"text-align:center\"><canvas id=c width=400 height=400></canvas><p>Arrows or swipe \u00b7 Space to restart</p></div><script>\nconst c=document.getElementById('c'),x=c.getContext('2d'),N=20,S=20;let sn,d,f,score,best=+localStorage.best||0,alive,t;\nfunction reset(){sn=[{x:10,y:10}];d={x:1,y:0};score=0;alive=true;food();clearInterval(t);t=setInterval(tick,120)}\nfunction food(){do f={x:Math.random()*N|0,y:Math.random()*N|0};while(sn.some(s=>s.x==f.x&&s.y==f.y))}\nfunction tick(){if(!alive)return;const h={x:(sn[0].x+d.x+N)%N,y:(sn[0].y+d.y+N)%N};if(sn.some(s=>s.x==h.x&&s.y==h.y)){alive=false;best=Math.max(best,score);localStorage.best=best;return draw()}\nsn.unshift(h);if(h.x==f.x&&h.y==f.y){score++;food();if(score%5==0){clearInterval(t);t=setInterval(tick,Math.max(50,120-score*3))}}else sn.pop();draw()}\nfunction draw(){x.fillStyle='#000';x.fillRect(0,0,400,400);x.fillStyle='#ff375f';x.fillRect(f.x*S,f.y*S,S-2,S-2);x.fillStyle='#30d158';sn.forEach(s=>x.fillRect(s.x*S,s.y*S,S-2,S-2));\nx.fillStyle='#fff';x.font='16px system-ui';x.fillText('Score '+score+'   Best '+best,10,22);if(!alive){x.font='bold 32px system-ui';x.fillText('Game over',120,200)}}\nconst dir={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};\naddEventListener('keydown',e=>{if(dir[e.key]){const[a,b]=dir[e.key];if(a!=-d.x||b!=-d.y)d={x:a,y:b};e.preventDefault()}if(e.key==' ')reset()});\nlet sx,sy;c.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY});c.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;\nif(!alive)return reset();const k=Math.abs(dx)>Math.abs(dy)?(dx>0?'ArrowRight':'ArrowLeft'):(dy>0?'ArrowDown':'ArrowUp');dispatchEvent(new KeyboardEvent('keydown',{key:k}))});reset()</script></body></html>"
+  }
+ },
+ "breakout": {
+  "kind": "game",
+  "name": "Breakout",
+  "description": "Paddle-and-bricks game with lives and levels (mouse, touch or arrows).",
+  "tags": [
+   "arcade"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Breakout</title>\n<style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#111;color:#eee;font:16px system-ui}canvas{background:#000;border-radius:12px;max-width:96vw;touch-action:none}p{opacity:.7}</style>\n<body><div style=\"text-align:center\"><canvas id=c width=480 height=360></canvas><p>Move with mouse, touch or arrows \u00b7 Click to launch</p></div><script>\nconst c=document.getElementById('c'),x=c.getContext('2d'),W=480,H=360;let px=200,b,bricks,lives,level,stuck,keys={};\nfunction build(){bricks=[];for(let r=0;r<4+level;r++)for(let i=0;i<8;i++)bricks.push({x:8+i*58,y:30+r*20,a:1})}\nfunction serve(){b={x:px+40,y:H-40,vx:3,vy:-3-level*.5};stuck=true}function start(){lives=3;level=1;build();serve()}\nc.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect();px=(e.clientX-r.left)*W/r.width-40});c.addEventListener('touchmove',e=>{const r=c.getBoundingClientRect();px=(e.touches[0].clientX-r.left)*W/r.width-40;e.preventDefault()});\nc.addEventListener('click',()=>{if(lives<=0)start();stuck=false});c.addEventListener('touchend',()=>stuck=false);addEventListener('keydown',e=>{keys[e.key]=1;if(e.key==' ')stuck=false});addEventListener('keyup',e=>keys[e.key]=0);\nfunction loop(){if(keys.ArrowLeft)px-=7;if(keys.ArrowRight)px+=7;px=Math.max(0,Math.min(W-80,px));\nif(lives>0){if(stuck){b.x=px+40;b.y=H-40}else{b.x+=b.vx;b.y+=b.vy;if(b.x<6||b.x>W-6)b.vx*=-1;if(b.y<6)b.vy*=-1;\nif(b.y>H-30&&b.y<H-18&&b.x>px&&b.x<px+80){b.vy=-Math.abs(b.vy);b.vx=(b.x-px-40)/8}\nif(b.y>H){lives--;serve()}for(const k of bricks)if(k.a&&b.x>k.x&&b.x<k.x+54&&b.y>k.y&&b.y<k.y+16){k.a=0;b.vy*=-1;break}\nif(bricks.every(k=>!k.a)){level++;build();serve()}}}\nx.fillStyle='#000';x.fillRect(0,0,W,H);bricks.forEach((k,i)=>{if(k.a){x.fillStyle=`hsl(${(k.y*3)%360} 80% 60%)`;x.fillRect(k.x,k.y,54,16)}});\nx.fillStyle='#fff';x.fillRect(px,H-26,80,8);x.beginPath();x.arc(b.x,b.y,6,0,7);x.fill();x.font='14px system-ui';x.fillText(`Lives ${lives}   Level ${level}`,10,18);\nif(lives<=0){x.font='bold 30px system-ui';x.fillText('Game over \u00b7 click',120,200)}requestAnimationFrame(loop)}start();loop()</script></body></html>"
+  }
+ },
+ "memory-game": {
+  "kind": "game",
+  "name": "Memory cards",
+  "description": "Flip-and-match card game with moves counter and timer.",
+  "tags": [
+   "puzzle"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Memory</title>\n<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111;color:#eee;font:16px system-ui}.g{display:grid;grid-template-columns:repeat(4,72px);gap:10px}\n.k{height:72px;border-radius:14px;background:#2c2c2e;display:grid;place-items:center;font-size:34px;cursor:pointer;user-select:none;transition:transform .2s}.k.o{background:#0a84ff;transform:rotateY(180deg)}.k.m{background:#30d158}</style>\n<body><div style=\"text-align:center\"><p id=s>Moves 0</p><div class=g id=g></div><p><button onclick=start()>New game</button></p></div><script>\nconst E=['\ud83c\udf4e','\ud83d\ude80','\ud83c\udfa7','\ud83c\udf35','\ud83d\udc19','\u26bd','\ud83c\udfb2','\ud83c\udf19'];let open=[],moves,matched,t0;\nfunction start(){const d=[...E,...E].sort(()=>Math.random()-.5);moves=0;matched=0;t0=Date.now();open=[];const g=document.getElementById('g');g.innerHTML='';\nd.forEach(e=>{const k=document.createElement('div');k.className='k';k.dataset.e=e;k.onclick=()=>flip(k);g.appendChild(k)});s.textContent='Moves 0'}\nfunction flip(k){if(open.length==2||k.classList.contains('o')||k.classList.contains('m'))return;k.classList.add('o');k.textContent=k.dataset.e;open.push(k);\nif(open.length==2){moves++;const[a,b]=open;if(a.dataset.e==b.dataset.e){a.classList.add('m');b.classList.add('m');open=[];matched+=2;\nif(matched==16)s.textContent=`Done in ${moves} moves, ${Math.round((Date.now()-t0)/1000)} s`;else s.textContent='Moves '+moves}\nelse setTimeout(()=>{open.forEach(x=>{x.classList.remove('o');x.textContent=''});open=[];s.textContent='Moves '+moves},700)}}start()</script></body></html>"
+  }
+ },
+ "platformer": {
+  "kind": "game",
+  "name": "Platformer",
+  "description": "A tiny side-scroller: run, jump, collect coins, reach the flag.",
+  "tags": [
+   "action"
+  ],
+  "files": {
+   "index.html": "<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Platformer</title>\n<style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#111;color:#eee;font:16px system-ui}canvas{background:#000;border-radius:12px;max-width:96vw;touch-action:none}p{opacity:.7}</style>\n<body><div style=\"text-align:center\"><canvas id=c width=640 height=360></canvas><p>Arrows/A-D to move \u00b7 Space/W to jump</p></div><script>\nconst c=document.getElementById('c'),x=c.getContext('2d'),W=640,H=360,G=.6;let p,cam,coins,score,won,k={};\nconst plats=[[0,330,900,30],[220,260,120,14],[400,210,120,14],[600,160,140,14],[820,250,160,14],[1000,330,700,30],[1150,250,90,14],[1300,190,90,14]];const flag=1600;\nfunction reset(){p={x:40,y:200,vx:0,vy:0,on:false};cam=0;score=0;won=false;coins=[[260,230],[450,180],[660,130],[880,220],[1190,220],[1340,160],[1450,300]].map(([a,b])=>({x:a,y:b,t:0}))}\naddEventListener('keydown',e=>{k[e.key.toLowerCase()]=1;if(e.key==' ')e.preventDefault();if(won&&e.key=='Enter')reset()});addEventListener('keyup',e=>k[e.key.toLowerCase()]=0);\nfunction step(){if(won)return;const L=k.arrowleft||k.a,R=k.arrowright||k.d,J=k[' ']||k.w||k.arrowup;p.vx=(R-L)*4;if(J&&p.on){p.vy=-11;p.on=false}p.vy+=G;p.x+=p.vx;p.y+=p.vy;p.on=false;\nfor(const[a,b,w,h]of plats)if(p.x+20>a&&p.x<a+w&&p.y+28>b&&p.y+28-p.vy<=b+1&&p.vy>=0){p.y=b-28;p.vy=0;p.on=true}\nif(p.y>H+100)reset();for(const q of coins)if(!q.t&&Math.abs(p.x+10-q.x)<16&&Math.abs(p.y+14-q.y)<20){q.t=1;score++}if(p.x>flag)won=true;cam=Math.max(0,p.x-W/3)}\nfunction draw(){x.fillStyle='#0b1e3a';x.fillRect(0,0,W,H);x.save();x.translate(-cam,0);x.fillStyle='#3a7d44';plats.forEach(([a,b,w,h])=>x.fillRect(a,b,w,h));\nx.fillStyle='#ffd60a';coins.forEach(q=>{if(!q.t){x.beginPath();x.arc(q.x,q.y,7,0,7);x.fill()}});x.fillStyle='#fff';x.fillRect(flag,250,4,80);x.fillStyle='#ff375f';x.fillRect(flag+4,250,30,18);\nx.fillStyle='#64d2ff';x.fillRect(p.x,p.y,20,28);x.restore();x.fillStyle='#fff';x.font='16px system-ui';x.fillText('Coins '+score+'/'+coins.length,12,24);\nif(won){x.font='bold 30px system-ui';x.fillText('You made it! Enter to replay',120,180)}}(function loop(){step();draw();requestAnimationFrame(loop)})();reset()</script></body></html>"
+  }
+ },
+ "text-classifier": {
+  "kind": "model",
+  "name": "Text classifier",
+  "description": "A sample labelled dataset ready for the built-in trainer (press Train), plus a README.",
+  "tags": [
+   "training"
+  ],
+  "files": {
+   "data/train.csv": "text,label\nI love this product,positive\nAbsolutely fantastic service,positive\nGreat quality and fast delivery,positive\nReally happy with my purchase,positive\nExcellent value for money,positive\nThis is terrible,negative\nWorst experience ever,negative\nThe item arrived broken,negative\nVery disappointed with the quality,negative\nI want a refund,negative\nIt is okay I guess,neutral\nArrived on Tuesday,neutral\nThe box was blue,neutral\nNothing special,neutral\nAverage product,neutral\n",
+   "README.md": "# Text classifier\n\n`data/train.csv` has a `text` and a `label` column. Add a few hundred rows of your own, then open **Project AI**, choose this file and press **Train**.\n\nOverfit protection is on by default: 20% of rows are held out for validation, training stops early when validation loss stops improving, and the best epoch is kept.\n"
+  }
+ },
+ "chat-finetune": {
+  "kind": "model",
+  "name": "Chat fine-tune (LoRA)",
+  "description": "A JSONL chat dataset and settings for LoRA fine-tuning a small open model.",
+  "tags": [
+   "training",
+   "llm"
+  ],
+  "files": {
+   "data/chat.jsonl": "{\"messages\": [{\"role\": \"user\", \"content\": \"What are your opening hours?\"}, {\"role\": \"assistant\", \"content\": \"We are open 9:00-17:00, Monday to Friday.\"}]}\n{\"messages\": [{\"role\": \"user\", \"content\": \"Do you ship abroad?\"}, {\"role\": \"assistant\", \"content\": \"Yes, to the EU and the UK. Delivery takes 3-5 days.\"}]}\n{\"messages\": [{\"role\": \"user\", \"content\": \"How do I return an item?\"}, {\"role\": \"assistant\", \"content\": \"Reply to your order email within 30 days and we send a free return label.\"}]}\n",
+   "README.md": "# Chat fine-tune\n\n1. Add many more examples to `data/chat.jsonl` (hundreds at least).\n2. In the project's **Environment**, turn on Python and add `torch transformers peft datasets`.\n3. In **Project AI**, choose trainer `lora`, a small base model (for example `Qwen/Qwen2.5-0.5B-Instruct`) and allow network for the first download.\n4. Press **Train** and watch the loss curves. The best checkpoint is saved to `.training/<run>/out/best`.\n"
+  }
+ },
+ "docker-api": {
+  "kind": "infra",
+  "name": "Docker + API",
+  "description": "A tiny Python API with Dockerfile, docker-compose and a healthcheck.",
+  "tags": [
+   "docker"
+  ],
+  "deploy": "none",
+  "files": {
+   "app.py": "from http.server import BaseHTTPRequestHandler, HTTPServer\nimport json, os\n\n\nclass H(BaseHTTPRequestHandler):\n    def do_GET(self):\n        body = json.dumps({\"ok\": True, \"path\": self.path}).encode()\n        self.send_response(200)\n        self.send_header(\"Content-Type\", \"application/json\")\n        self.end_headers()\n        self.wfile.write(body)\n\n\nHTTPServer((\"0.0.0.0\", int(os.environ.get(\"PORT\", 8000))), H).serve_forever()\n",
+   "Dockerfile": "FROM python:3.12-slim\nWORKDIR /app\nCOPY app.py .\nENV PORT=8000\nEXPOSE 8000\nHEALTHCHECK CMD python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')\"\nUSER nobody\nCMD [\"python\", \"app.py\"]\n",
+   "docker-compose.yml": "services:\n  api:\n    build: .\n    ports:\n      - \"127.0.0.1:8000:8000\"\n    restart: unless-stopped\n",
+   "README.md": "# Docker + API\n\n```\ndocker compose up --build\ncurl http://127.0.0.1:8000/health\n```\n"
+  }
+ },
+ "github-ci": {
+  "kind": "infra",
+  "name": "GitHub Actions CI",
+  "description": "A CI workflow that lints and tests a Python project on every push and pull request.",
+  "tags": [
+   "ci"
+  ],
+  "deploy": "none",
+  "files": {
+   ".github/workflows/ci.yml": "name: CI\non: [push, pull_request]\npermissions:\n  contents: read\njobs:\n  test:\n    runs-on: ubuntu-latest\n    strategy:\n      matrix:\n        python: [\"3.10\", \"3.12\"]\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: ${{ matrix.python }}\n      - run: pip install pytest ruff\n      - run: ruff check .\n      - run: pytest -q\n",
+   "tests/test_example.py": "def test_example():\n    assert 1 + 1 == 2\n"
+  }
+ },
+ "cloudflare-ai-worker": {
+  "kind": "infra",
+  "name": "Cloudflare AI Worker",
+  "description": "A Cloudflare Worker that answers prompts with Workers AI, with wrangler config.",
+  "tags": [
+   "cloudflare",
+   "ai"
+  ],
+  "deploy": "worker",
+  "files": {
+   "src/index.js": "export default {\n  async fetch(request, env) {\n    if (request.method !== 'POST') return new Response('POST {\"prompt\": \"...\"}', { status: 405 });\n    const { prompt } = await request.json();\n    if (!prompt || prompt.length > 4000) return new Response('prompt required (max 4000 chars)', { status: 400 });\n    const out = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', { messages: [{ role: 'user', content: prompt }] });\n    return Response.json(out);\n  },\n};\n",
+   "wrangler.toml": "name = \"ai-worker\"\nmain = \"src/index.js\"\ncompatibility_date = \"2025-01-01\"\n\n[ai]\nbinding = \"AI\"\n",
+   "README.md": "# Cloudflare AI Worker\n\nDeploy from agentlab with **Deploy \u2192 Cloudflare** (needs `cloudflare_api_token` and `cloudflare_account` saved under Providers), or run `npx wrangler deploy`.\n"
+  }
+ },
+ "nginx-static": {
+  "kind": "infra",
+  "name": "Nginx static host",
+  "description": "Nginx config with HTTPS redirects, caching and security headers for a static site.",
+  "tags": [
+   "web"
+  ],
+  "deploy": "none",
+  "files": {
+   "nginx.conf": "server {\n    listen 80;\n    server_name example.com;\n    return 301 https://$host$request_uri;\n}\nserver {\n    listen 443 ssl http2;\n    server_name example.com;\n    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;\n    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;\n    root /var/www/site;\n    add_header X-Content-Type-Options nosniff;\n    add_header Referrer-Policy strict-origin-when-cross-origin;\n    add_header Content-Security-Policy \"default-src 'self'\";\n    location ~* \\.(css|js|png|jpg|svg|woff2)$ { expires 30d; }\n    location / { try_files $uri $uri/ /index.html; }\n}\n"
+  }
+ }
+}

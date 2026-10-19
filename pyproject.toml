@@ -17,4 +17,4 @@ agentlab = "agentlab.cli:main"
 packages = ["agentlab"]
 
 [tool.setuptools.package-data]
-agentlab = ["ui/*", "assets/*"]
+agentlab = ["ui/*", "assets/*", "templates/*"]
