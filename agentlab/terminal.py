@@ -6,19 +6,27 @@ This is your own terminal, not an agent's: commands are not blocked, but obvious
 flagged in the output so a slip is visible. Sessions end after 30 idle minutes or when the server stops.
 """
 
-import fcntl
 import os
-import pty
 import re
 import select
 import signal
 import struct
-import termios
 import threading
 import time
 import uuid
 
 from . import danger, envs, project_env, projects
+
+# The built-in terminal needs a Unix pseudo-terminal. On Windows the module still imports and the
+# terminal reports itself as unavailable; the rest of agentlab works normally.
+try:
+    import fcntl
+    import pty
+    import termios
+    AVAILABLE = True
+except ImportError:  # Windows
+    fcntl = pty = termios = None
+    AVAILABLE = False
 
 IDLE = 30 * 60
 MAX_BUFFER = 2_000_000
@@ -115,6 +123,8 @@ class Session:
 
     def resize(self, cols, rows):
         cols, rows = max(20, min(int(cols), 400)), max(5, min(int(rows), 200))
+        if not AVAILABLE:
+            return
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
     def close(self):
@@ -146,6 +156,8 @@ def _reap():
 
 
 def open_session(root, pid, cols=100, rows=30):
+    if not AVAILABLE:
+        raise TerminalError("the built-in terminal needs Linux or macOS; on Windows use Windows Terminal or PowerShell in the project folder", 501)
     projects.get(root, pid)
     _reap()
     with _lock:
