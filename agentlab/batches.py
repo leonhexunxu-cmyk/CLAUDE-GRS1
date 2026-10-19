@@ -110,7 +110,7 @@ def list_batches(root, runtime):
 def cancel(root, runtime, bid):
     st = status(root, runtime, bid)
     for r in st["items"]:
-        if r["job"] and r["status"] in ("queued", "running", "waiting_approval"):
+        if r["job"] and r["status"] in ("queued", "running", "waiting_approval", "paused"):
             try:
                 runtime.cancel(r["job"])
             except Exception:

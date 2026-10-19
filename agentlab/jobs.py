@@ -133,11 +133,12 @@ class Runtime:
         self.after_feedback = after_feedback  # (job) hook: lessons from your feedback
         self.approval_timeout = approval_timeout
         self._lock = threading.RLock()
-        self._cancel, self._wait, self._always = {}, {}, {}
+        self._cancel, self._wait, self._always, self._bp = {}, {}, {}, {}
         self._sem = Limiter(max_concurrent)
+        self._live = {}
         self.dir = data_dir(self.root) / "jobs"
         for j in self.list():
-            if j["status"] in ("queued", "running", "waiting_approval"):
+            if j["status"] in ("queued", "running", "waiting_approval", "paused"):
                 j.update(status="failed", error="server stopped while the job was running", ended=time.time(), pending=None)
                 self._save(j)
 
@@ -172,7 +173,7 @@ class Runtime:
         return sorted(out, key=lambda j: j["created"], reverse=True)[:limit]
 
     # ---- control ----
-    def start(self, project_id, agent_id, prompt, *, autonomous=False, overrides=None, schedule=None):
+    def start(self, project_id, agent_id, prompt, *, autonomous=False, overrides=None, schedule=None, step_mode=False):
         prompt = str(prompt or "").strip()
         if not prompt or len(prompt) > 20000:
             raise JobError("a prompt is required (max 20,000 characters)")
@@ -184,7 +185,7 @@ class Runtime:
                "progress": {"percent": 0, "note": "", "step": 0, "max_steps": agent["limits"]["max_steps"]},
                "metrics": {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0, "tool_calls": 0, "tool_errors": 0, "approvals_asked": 0,
                            "approvals_denied": 0, "blocked": 0, "files_written": 0, "cost": 0.0, "duration_s": 0.0},
-               "summary": "", "error": None, "stop_reason": None, "pending": None}
+               "summary": "", "error": None, "stop_reason": None, "pending": None, "debug": {"step_mode": bool(step_mode), "breakpoints": 0}}
         self._save(job)
         self._cancel[job["id"]] = threading.Event()
         threading.Thread(target=self._run, args=(job["id"],), daemon=True).start()
@@ -201,10 +202,79 @@ class Runtime:
         if job["status"] in FINAL:
             raise JobError("job already finished")
         self._cancel.setdefault(job_id, threading.Event()).set()
-        w = self._wait.get(job_id)
-        if w:
-            w["event"].set()
+        for w in (self._wait.get(job_id), self._bp.get(job_id)):
+            if w:
+                w["event"].set()
         return job
+
+    # ---- debugger ----
+    def trace(self, job_id):
+        """Every step of a job: model calls (timing, tokens, what it decided) and tool calls (arguments, result, timing)."""
+        self.get(job_id)
+        p = self.dir / job_id / "trace.jsonl"
+        out = []
+        for line in p.read_text(encoding="utf-8").splitlines() if p.exists() else []:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+        return out
+
+    def _trace(self, job, **entry):
+        with self._lock:
+            with open(self.dir / job["id"] / "trace.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"ts": time.time(), **entry}, default=str) + "\n")
+
+    def set_step_mode(self, job_id, on):
+        """Turn step-through on (pause before every model call and tool call) or off, even while the job runs."""
+        with self._lock:
+            job = self.get(job_id)
+            if job["status"] in FINAL:
+                raise JobError("job already finished")
+            job.setdefault("debug", {"step_mode": False, "breakpoints": 0})["step_mode"] = bool(on)
+            self._save(job)
+        live = self._live.get(job_id)
+        if live:
+            live["debug"]["step_mode"] = bool(on)
+        if not on:
+            self.resume(job_id, "continue", quiet=True)
+        return self.get(job_id)
+
+    def resume(self, job_id, action="step", arguments=None, quiet=False):
+        """At a breakpoint: step (do this one, pause at the next), continue (run on), skip (a tool call only), or
+        edit the tool call's arguments before it runs."""
+        if action not in ("step", "continue", "skip"):
+            raise JobError("action must be step, continue or skip")
+        w = self._bp.get(job_id)
+        if not w:
+            if quiet:
+                return
+            raise JobError("the job is not paused", 404)
+        if action == "skip" and w["kind"] != "tool":
+            raise JobError("only a tool call can be skipped")
+        if arguments is not None:
+            if w["kind"] != "tool" or not isinstance(arguments, dict):
+                raise JobError("only a tool call's arguments can be edited (as an object)")
+            w["arguments"] = arguments
+        w["action"] = action
+        w["event"].set()
+
+    def _breakpoint(self, job, kind, info, cancel):
+        """Pause if step mode is on. Returns (action, edited_arguments or None)."""
+        if not job.get("debug", {}).get("step_mode") or cancel.is_set():
+            return "continue", None
+        w = {"event": threading.Event(), "kind": kind, "action": None, "arguments": None}
+        self._bp[job["id"]] = w
+        job["debug"]["breakpoints"] += 1
+        job.update(status="paused", pending={"kind": "breakpoint", "at": kind, **info})
+        self._save(job)
+        w["event"].wait()
+        self._bp.pop(job["id"], None)
+        job.update(status="running", pending=None)
+        if w["action"] == "continue":
+            job["debug"]["step_mode"] = False
+        self._save(job)
+        return w["action"] or "continue", w["arguments"]
 
     def feedback(self, job_id, rating, note=""):
         """Record your verdict on a finished job (+1 / -1 and an optional note); the agent learns from it."""
@@ -243,6 +313,7 @@ class Runtime:
     def _finish(self, job, status, **kw):
         with self._lock:
             job.update(status=status, ended=time.time(), pending=None, **kw)
+            self._live.pop(job["id"], None)
             job["metrics"]["duration_s"] = round(job["ended"] - (job["started"] or job["created"]), 1)
             if status == "succeeded":
                 job["progress"]["percent"] = 100
@@ -252,6 +323,7 @@ class Runtime:
 
     def _run(self, job_id):
         job = self.get(job_id)
+        self._live[job_id] = job
         cancel = self._cancel[job_id]
         agent = None
         with self._sem:
@@ -311,6 +383,9 @@ class Runtime:
                 job["progress"]["percent"] = min(90, int(100 * (step - 1) / lim["max_steps"]))
             self._save(job)
             self._compact(messages, provider, lim.get("context_tokens", 0))
+            self._breakpoint(job, "model", {"step": step, "messages": len(messages), "context_tokens": sum(len(str(x.get("content", ""))) for x in messages) // 4}, cancel)
+            if cancel.is_set():
+                return self._finish(job, "cancelled")
             t0 = time.time()
             try:
                 reply = llm.chat(provider, system, messages, tools, max_tokens=lim["max_output_tokens"], temperature=lim["temperature"], project=self.root)
@@ -324,6 +399,8 @@ class Runtime:
             m["output_tokens"] += reply["usage"]["output"]
             m["llm_calls"] += 1
             m["cost"] = round(m["cost"] + cost, 6)
+            self._trace(job, step=step, phase="model", ms=int((time.time() - t0) * 1000), input_tokens=reply["usage"]["input"], output_tokens=reply["usage"]["output"],
+                        stop=reply["stop"], text=reply["text"][:2000], tool_calls=[{"name": c["name"], "arguments": c["arguments"]} for c in reply["tool_calls"]])
             messages.append({"role": "assistant", "content": reply["text"], "tool_calls": reply["tool_calls"]})
             if reply["text"]:
                 self._event(job, "output", reply["text"], tool="assistant")
@@ -335,7 +412,18 @@ class Runtime:
             for call in reply["tool_calls"]:
                 if cancel.is_set():
                     return self._finish(job, "cancelled")
-                result, finished = self._tool(job, agent, call, cancel)
+                action, edited = self._breakpoint(job, "tool", {"step": step, "tool": call["name"], "arguments": call["arguments"]}, cancel)
+                if cancel.is_set():
+                    return self._finish(job, "cancelled")
+                if edited is not None:
+                    call = {**call, "arguments": edited}
+                t1 = time.time()
+                if action == "skip":
+                    result, finished = "The user skipped this tool call while debugging. Continue without it.", None
+                else:
+                    result, finished = self._tool(job, agent, call, cancel)
+                self._trace(job, step=step, phase="tool", tool=call["name"], arguments=call["arguments"], result=str(result)[:2000], ms=int((time.time() - t1) * 1000),
+                            skipped=action == "skip", edited=edited is not None)
                 if call["name"] == "update_progress":
                     explicit = True
                 messages.append({"role": "tool", "tool_call_id": call["id"], "name": call["name"], "content": result})
