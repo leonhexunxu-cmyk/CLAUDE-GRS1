@@ -45,13 +45,12 @@ def parse_cron(expr):
                 a, b = map(int, rng.split("-"))
             else:
                 a = b = int(rng)
-                if m.group(2):
-                    b = hi
-            if name == "dow":
-                a, b = (0 if a == 7 else a), (6 if b == 7 else b)
-            if not (lo <= a <= b <= hi):
+            top = 7 if name == "dow" else hi  # day-of-week accepts 7 as Sunday
+            if rng != "*" and "-" not in rng and m.group(2):
+                b = top
+            if not (lo <= a <= b <= top):
                 raise ScheduleError(f"{name} must be between {lo} and {hi}")
-            allowed.update(range(a, b + 1, step))
+            allowed.update(v % 7 if name == "dow" else v for v in range(a, b + 1, step))
         sets.append(allowed)
     return sets
 

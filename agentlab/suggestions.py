@@ -8,7 +8,6 @@ import time
 
 from . import accounts, agent_stats, agents, evolution, memory, notify, projects, runners, usage
 from .hooks import data_dir
-from .scheduler import Scheduler  # noqa: F401  (schedules are read from their file below)
 
 SNOOZE_DAYS = 7
 
