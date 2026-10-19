@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<script>
+// Runs pad code in a Web Worker inside this sandboxed, network-less frame. The parent can kill the whole frame.
+const workerSrc = `
+const fmt = (v) => typeof v === "string" ? v : (() => { try { return JSON.stringify(v, null, 2) ?? String(v); } catch { return String(v); } })();
+const send = (level, args) => self.postMessage({ level, text: args.map(fmt).join(" ") });
+console.log = (...a) => send("log", a); console.info = console.log;
+console.warn = (...a) => send("warn", a); console.error = (...a) => send("error", a);
+self.onmessage = async (e) => {
+  try {
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const r = await new AsyncFunction(e.data)();
+    if (r !== undefined) send("result", [r]);
+  } catch (err) { send("error", [err && err.stack ? err.stack : String(err)]); }
+  self.postMessage({ done: true });
+};`;
+window.addEventListener("message", (e) => {
+  if (e.source !== parent || typeof e.data !== "string") return;
+  const w = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" })));
+  w.onmessage = (m) => parent.postMessage(m.data, "*");
+  w.onerror = (m) => { parent.postMessage({ level: "error", text: m.message }, "*"); parent.postMessage({ done: true }, "*"); };
+  w.postMessage(e.data);
+}, { once: true });
+parent.postMessage({ ready: true }, "*");
+</script>

@@ -28,6 +28,14 @@ def main(argv=None):
     p.add_argument("--project", default="."); p.add_argument("--print-config", action="store_true",
                                                          help="print the mcpServers JSON for your client and exit")
 
+    p = sub.add_parser("apigen", help="print a generated API client")
+    p.add_argument("language", choices=["python", "javascript", "typescript", "curl"])
+    p.add_argument("--base", default="http://127.0.0.1:8765")
+
+    p = sub.add_parser("key", help="manage API keys")
+    p.add_argument("action", choices=["create", "list", "revoke"]); p.add_argument("value", nargs="?", help="label (create) or id (revoke)")
+    p.add_argument("--project", default=".")
+
     sub.add_parser("hook", help="hook entry point (reads a Claude Code event from stdin)")
 
     p = sub.add_parser("replay", help="show a recorded run as a timeline")
@@ -67,6 +75,20 @@ def main(argv=None):
         if a.with_mcp:
             from .install import install_mcp_config
             print("updated", install_mcp_config(a.project))
+    elif a.cmd == "apigen":
+        from . import apigen
+        print(apigen.generate(a.language, a.base), end="")
+    elif a.cmd == "key":
+        from . import apikeys
+        if a.action == "create":
+            rec, key = apikeys.create(a.project, a.value or "")
+            print(f"{key}\n(id {rec['id']}; shown once, store it now)")
+        elif a.action == "list":
+            for k in apikeys.list_keys(a.project):
+                print(f"{k['id']}  {k['prefix']}…  {k['label']}")
+        else:
+            print("revoked" if a.value and apikeys.revoke(a.project, a.value) else "no such key")
+            return 0 if a.value else 1
     elif a.cmd == "mcp":
         from . import mcp
         if a.print_config:

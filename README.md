@@ -21,6 +21,22 @@ Use Claude Code as normal. Every prompt, tool call and edit is recorded under `.
 
 Add `--with-permissions` to also merge the generated `permissions` block into `settings.json`.
 
+## Dashboard
+
+`agentlab serve` opens a minimal, Apple-style dashboard:
+
+- **First run:** pick your language (English, Español, Français, Deutsch, 简体中文, 日本語; your browser's language is pre-selected). Add a language by adding one object to `agentlab/ui/i18n.json`; a test checks every key is present.
+- **Settings (gear icon):** language, light/dark/auto, accent colour, text size, reduce motion, default code language, and Pad options. Stored in your browser.
+- **Pad:** a code scratchpad saved in `.agentlab/pads/`. JavaScript runs in an isolated sandbox with no network and a 5 second limit (Cmd/Ctrl+Enter). Other languages are for writing and copying.
+- **API:** generate a client for Python, JavaScript, TypeScript or curl, open it in the Pad, manage API keys, and browse every endpoint. The same description is served as OpenAPI at `/api/openapi.json`.
+
+```
+agentlab apigen python > agentlab_client.py   # same generator from the command line
+agentlab key create "ci"                       # keys are optional; shown once, stored hashed
+```
+
+Once any key exists, API calls need `Authorization: Bearer <key>` (the dashboard is exempt). Keys identify clients; they don't protect against other programs running as you on the same machine.
+
 ## MCP server (any MCP-capable agent)
 
 ```
@@ -58,6 +74,9 @@ All routes are JSON, on localhost only. POST bodies must use `Content-Type: appl
 | `POST /api/runs/<id>/fork` `{step}` | fork from a step |
 | `POST /api/events` `{run, kind, content, tool?}` | ingest an event from any adapter |
 | `GET/POST /api/policy` | read or save the project policy |
+| `GET/POST /api/pads`, `GET /api/pads/<id>`, `POST /api/pads/<id>/delete` | code pads |
+| `GET/POST /api/keys`, `POST /api/keys/<id>/revoke` | API keys |
+| `POST /api/generate` `{language, base_url}` | generate a client; `GET /api/openapi.json` for the spec |
 | `POST /api/policy/simulate`, `/check`, `/settings` | `{rules}` (plus `action`, `target` for check) |
 | `POST /api/regress` | `{baseline, candidate, threshold}` |
 | `POST /api/tripwires/plant`, `/audit` | `{seed, n, document}` or `{seed, n, answer}` |
