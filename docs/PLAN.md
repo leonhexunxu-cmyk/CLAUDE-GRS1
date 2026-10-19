@@ -12,6 +12,7 @@ Goal: make agentlab something people can plug into the coding agents they alread
 | **M3** Local backend (`agentlab serve`): REST API, localhost only, safe against DNS rebinding and cross-site posts | Done |
 | **M4** Web dashboard: runs timeline with replay and fork, sandbox editor with live attack simulation, regression diff, tripwire audit | Done |
 | **M4b** API generator (Python/JS/TS/curl + OpenAPI), optional API keys, code pad with isolated JS runner, first-run language choice, settings/personalisation, Apple-style UI refresh | Done |
+| **M4c** Dashboard with agent health insights, dedicated task environments (isolated copy, scrubbed env, network off, review and apply), webhook connectors, Run-in-environment from the Pad, sidebar UI | Done |
 | **M5** MCP server (`agentlab mcp`) exposing `check_policy`, `record_note`, `plant_canaries`, `audit_answer` to any MCP-capable agent | Done |
 | **M6a** Verify OpenClaw and Kimi Code support from official docs; `agentlab connect/disconnect/status`, Kimi hooks, OpenClaw plugin, shared tool-name normalisation, per-project opt-in | Done |
 | **M6b** Run the Kimi and OpenClaw integrations inside the real apps and confirm the assumed fields | Next (needs the apps) |
@@ -45,6 +46,9 @@ Goal: make agentlab something people can plug into the coding agents they alread
 | `connect.py`, `assets/openclaw_plugin.js` | connect, disconnect and status for Claude Code, Kimi Code, OpenClaw |
 | `mcp.py` | MCP stdio server for any MCP-capable agent |
 | `server.py`, `ui/` | backend and dashboard (`index.html`, `app.js`, `style.css`, `i18n.json`, `runner.html`) |
+| `envs.py` | dedicated environments: copy, run, snapshot, diff, safe apply |
+| `insights.py` | agent health, hourly activity, tool usage |
+| `notify.py` | signed webhook connectors |
 | `apigen.py` | single description of the API; OpenAPI and client generators |
 | `apikeys.py`, `pads.py` | hashed API keys; code pad storage |
 | `cli.py` | `agentlab` command |
@@ -59,6 +63,10 @@ Goal: make agentlab something people can plug into the coding agents they alread
 
 - Translations were written without a native-speaker review, and plurals are simple ("1 bloqueadas"). Have speakers check them before release.
 - The pad's JS runner is isolated (sandboxed frame, worker, no network, killed after 5 s) but is not a security boundary for hostile code against browser bugs.
+
+- Environments: `unshare` isolation was tested here; the Docker backend was not run against a daemon. The apply step is deliberately conservative (it skips files edited since the task began instead of merging).
+- Health is heuristic (error rate, block rate, stalls, hook failures); thresholds are constants in `insights.py`.
+- New dashboard strings were translated without native-speaker review.
 
 ## Before a public release
 

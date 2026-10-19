@@ -64,17 +64,34 @@ function setSetting(patch) {
   applySettings();
   renderChrome();
   if (!$("overlay").hidden && $("overlay").dataset.kind === "settings") renderSettings();
-  if (!$("overlay").hidden && $("overlay").dataset.kind === "connect") renderConnect();
   renderPage();
 }
 dark.addEventListener("change", applySettings);
 
 /* ---------- navigation ---------- */
-const TABS = [["activity", "tab_activity"], ["sandbox", "tab_sandbox"], ["regress", "tab_regress"], ["tripwires", "tab_tripwires"], ["pad", "tab_pad"], ["api", "tab_api"]];
-let current = "activity", poll = null, leave = null;
+const NAV = [
+  ["nav_monitor", [["dashboard", "tab_dashboard"], ["activity", "tab_activity"]]],
+  ["nav_run", [["tasks", "tab_tasks"], ["pad", "tab_pad"]]],
+  ["nav_protect", [["sandbox", "tab_sandbox"], ["checks", "tab_checks"]]],
+  ["nav_connect", [["connectors", "tab_connectors"], ["api", "tab_api"]]],
+];
+const TABS = NAV.flatMap(([, items]) => items);
+const ICONS = {
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  activity: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  tasks: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M10 9l5 3-5 3z"/>',
+  pad: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+  sandbox: '<path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/>',
+  checks: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
+  connectors: '<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/>',
+  api: '<path d="M8 4c-2 0-3 1-3 3v2c0 1.5-1 3-2 3 1 0 2 1.5 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 1.5 1 3 2 3-1 0-2 1.5-2 3v2c0 2-1 3-3 3"/>',
+};
+const icon = (id) => { const s_ = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s_.setAttribute("width", "18"); s_.setAttribute("height", "18"); s_.setAttribute("viewBox", "0 0 24 24"); s_.setAttribute("fill", "none"); s_.setAttribute("stroke", "currentColor"); s_.setAttribute("stroke-width", "1.7"); s_.setAttribute("stroke-linecap", "round"); s_.setAttribute("stroke-linejoin", "round"); s_.innerHTML = ICONS[id]; return s_; };
+let current = "dashboard", poll = null, leave = null;
 
 function renderChrome() {
-  $("tabs").replaceChildren(...TABS.map(([id, key]) => h("button", { role: "tab", "aria-selected": id === current, onclick: () => show(id) }, t(key))));
+  $("nav").replaceChildren(...NAV.map(([group, items]) => h("div", { class: "nav-group" }, h("div", { class: "nav-label" }, t(group)),
+    items.map(([id, key]) => h("button", { class: "nav-item", "aria-current": id === current, onclick: () => show(id) }, icon(id), h("span", {}, t(key)))))));
   $("openSettings").setAttribute("aria-label", t("settings"));
   $("status").title = $("status").classList.contains("up") ? t("connected") : t("offline");
 }
@@ -85,11 +102,11 @@ async function show(name) {
   history.replaceState(null, "", "#" + name);
   renderChrome();
   renderPage();
+  scrollTo(0, 0);
 }
 function renderPage() {
-  const page = $("page");
-  const body = pages[current]();
-  page.replaceChildren(h("div", { class: "reveal" }, body));
+  clearInterval(poll); poll = null;
+  $("page").replaceChildren(h("div", { class: "reveal" }, pages[current]()));
 }
 const head = (title, sub) => [h("h1", {}, t(title)), h("p", { class: "lead" }, t(sub))];
 
@@ -99,29 +116,9 @@ const ago = (ts) => {
   const s = Math.max(0, Date.now() / 1000 - ts);
   return s < 60 ? t("just_now") : s < 3600 ? t("m_ago", { n: Math.floor(s / 60) }) : s < 86400 ? t("h_ago", { n: Math.floor(s / 3600) }) : t("d_ago", { n: Math.floor(s / 86400) });
 };
-const SOURCES = { kimi_code_cli: "Kimi", openclaw: "OpenClaw" };
+const SOURCES = { kimi_code_cli: "Kimi", openclaw: "OpenClaw", task: "Task" };
 const ag = { list: [] };
-async function loadAgents() {
-  try { ag.list = (await api("/api/agents")).agents; } catch { return; }
-  if ($("agentStrip")) paintAgents();
-}
-function paintAgents() {
-  $("agentStrip").replaceChildren(...ag.list.map((a) => h("button", { class: "chip " + (a.connected ? "ok" : "mute"), onclick: renderConnect }, (a.connected ? "● " : "○ ") + a.name)),
-    h("button", { class: "btn plain", style: "padding:2px 8px;font-size:.85rem", onclick: renderConnect }, t("connect")));
-}
-function renderConnect() {
-  const ov = $("overlay");
-  ov.hidden = false; ov.className = ""; ov.dataset.kind = "connect";
-  const copyRow = (a) => { const b = h("button", { class: "btn plain", onclick: () => copyText(a.command, b) }, t("copy")); return h("div", { class: "row", style: "flex-basis:100%;flex-wrap:nowrap" }, h("code", { class: "grow mono" }, a.command), b); };
-  ov.replaceChildren(h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": t("connect") },
-    h("div", { class: "sheet-head" }, h("h3", {}, t("connect")), h("button", { class: "btn plain", onclick: closeOverlay }, t("done"))),
-    h("p", { class: "meta", style: "margin:0 0 4px" }, t("connect_hint")),
-    h("h2", {}, t("run_in_terminal")),
-    h("div", { class: "group" }, ag.list.map((a) => h("div", { class: "setrow", style: "flex-wrap:wrap" }, h("span", {}, a.name),
-      chip(a.connected ? t("a_connected") : a.detected ? t("a_detected") : t("a_missing"), a.connected ? "ok" : a.detected ? "" : "mute"),
-      a.connected ? null : copyRow(a)))),
-    h("div", { class: "row gap", style: "justify-content:center" }, h("code", { class: "mono" }, "agentlab connect"))));
-}
+async function loadAgents() { try { ag.list = (await api("/api/agents")).agents; } catch {} }
 const kindTone = { decision: "bad", error: "bad", output: "ok", file_edit: "warn", prompt: "", tool_call: "mute", tool_result: "mute" };
 
 async function loadRuns() {
@@ -134,7 +131,7 @@ async function loadRuns() {
 function paintRunList() {
   const box = $("runList");
   if (!box) return;
-  if (!act.runs.length) { box.replaceChildren(h("div", { class: "empty" }, h("b", {}, t("no_runs")), t("no_runs_hint"), h("button", { class: "btn gap", onclick: renderConnect }, t("connect")))); return; }
+  if (!act.runs.length) { box.replaceChildren(h("div", { class: "empty" }, h("b", {}, t("no_runs")), t("no_runs_hint"), h("button", { class: "btn gap", onclick: () => show("connectors") }, t("connect")))); return; }
   box.replaceChildren(...act.runs.map((r) => h("button", { "aria-current": r.id === act.selected, onclick: () => openRun(r.id) },
     h("div", { class: "t" }, r.title || r.id),
     h("div", { class: "meta" }, `${t("steps", { n: r.events })} · ${ago(r.last)}`, r.blocked ? chip(t("blocked_n", { n: r.blocked }), "bad") : null, r.errors ? chip(t("errors_n", { n: r.errors }), "bad") : null, r.forked_from ? chip(t("fork_tag"), "mute") : null, SOURCES[r.source] ? chip(SOURCES[r.source], "mute") : null))));
@@ -349,6 +346,12 @@ function pagePad() {
       let any = false;
       runJs(area.value, (d) => { any = true; lines_.append(h("div", { class: "line " + d.level }, d.text)); }, () => { if (!any) lines_.append(h("div", { class: "meta" }, t("no_output"))); runBtn.disabled = false; });
     };
+    const envBtn = h("button", { class: "btn plain", disabled: !["python", "shell"].includes(p.language), title: t("env_note"), onclick: async () => {
+      await savePad();
+      if (!iso.network_isolation && !confirm(t("iso_no"))) return;
+      const py = p.language === "python";
+      try { const rec = await api("/api/tasks", { name: p.name, command: py ? "python3 pad.py" : "sh pad.sh", files: { [py ? "pad.py" : "pad.sh"]: area.value }, network: !iso.network_isolation }); tk.selected = rec.id; tk.changes = null; await show("tasks"); } catch (e) { alert(e.message); }
+    } }, t("run_env"));
     const nameIn = h("input", { type: "text", class: "name", value: p.name, "aria-label": t("untitled"), oninput: (e) => { p.name = e.target.value; pd.dirty = true; queueSave(); } });
     const langSel = h("select", { "aria-label": t("language"), value: p.language, onchange: (e) => { p.language = e.target.value; pd.dirty = true; savePad().then(renderPage); } }, PAD_LANGS.map((l) => h("option", { value: l }, PAD_LABEL[l])));
     const copyBtn = h("button", { class: "btn plain", onclick: () => copyText(area.value, copyBtn) }, t("copy"));
@@ -359,7 +362,7 @@ function pagePad() {
       if (pd.pads.length) pd.pad = await api("/api/pads/" + pd.pads[0].id);
       renderPage();
     } }, t("delete"));
-    right = h("div", {}, h("div", { class: "pad-top" }, nameIn, langSel, status, copyBtn, del, runBtn),
+    right = h("div", {}, h("div", { class: "pad-top" }, nameIn, langSel, status, copyBtn, del, envBtn, runBtn),
       h("div", { class: "editor" + (S.wrap || !S.lineNumbers ? " wrap" : "") }, gutter, area), out);
     queueMicrotask(lines);
   }
@@ -424,6 +427,201 @@ function pageApi() {
     h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:flex-end;margin-bottom:4px" }, h("button", { class: "btn plain", onclick: () => ap.spec && download("agentlab-openapi.json", JSON.stringify(ap.spec, null, 2), "application/json") }, t("openapi") + " ↓")), endpoints)];
 }
 
+/* ---------- dashboard ---------- */
+const db = { data: null };
+const levelKey = { ok: "h_ok", warn: "h_warn", bad: "h_bad", idle: "h_idle", off: "h_off" };
+const reasonText = (r) => t("r_" + r.code, { n: r.n, pct: r.pct });
+function bars(hourly) {
+  const NS = "http://www.w3.org/2000/svg", w = 480, hgt = 100, max = Math.max(1, ...hourly), bw = w / hourly.length;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${hgt}`); svg.setAttribute("class", "bars"); svg.setAttribute("preserveAspectRatio", "none"); svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", t("chart_h"));
+  hourly.forEach((n, i) => {
+    const r = document.createElementNS(NS, "rect"), ht = n ? Math.max(4, (n / max) * (hgt - 6)) : 3;
+    r.setAttribute("x", i * bw + 2); r.setAttribute("width", bw - 4); r.setAttribute("y", hgt - ht); r.setAttribute("height", ht); r.setAttribute("rx", 3);
+    r.setAttribute("class", (i === hourly.length - 1 ? "now " : "") + (n ? "" : "zero"));
+    const title = document.createElementNS(NS, "title"); title.textContent = `${n}`; r.append(title); svg.append(r);
+  });
+  return svg;
+}
+function pageDashboard() {
+  const box = h("div");
+  const paint = () => {
+    const d = db.data;
+    if (!d) return box.replaceChildren(h("div", { class: "empty" }, "…"));
+    const T = d.totals, tile = (num, label, tone = "") => h("div", { class: "tile " + tone }, h("div", { class: "num" }, num), h("div", { class: "lab" }, label));
+    const agents = d.agents.length ? d.agents.map((a) => h("div", { class: "agent" }, h("span", { class: "hdot " + a.level }),
+      h("div", { class: "body" }, h("div", { class: "name" }, a.name), h("div", { class: "why" }, a.reasons.map(reasonText).join(" · ")),
+        a.stats.last ? h("div", { class: "meta", style: "margin-top:2px" }, t("last_active", { when: ago(a.stats.last) }) + (a.stats.steps ? ` · ${t("steps", { n: a.stats.steps })}` : "")) : null),
+      chip(t(levelKey[a.level]), { ok: "ok", warn: "warn", bad: "bad" }[a.level] || "mute")))
+      : [h("div", { class: "empty" }, h("b", {}, t("no_runs")), t("no_runs_hint"), h("button", { class: "btn gap", onclick: () => show("connectors") }, t("connect")))];
+    box.replaceChildren(
+      h("div", { class: "tiles" }, tile(T.active, t("t_active"), T.active ? "ok" : ""), tile(T.sessions, t("t_sessions")), tile(T.tool_calls, t("t_calls")),
+        tile(T.blocked, t("t_blocked"), T.blocked ? "warn" : ""), tile(T.errors, t("t_errors"), T.errors ? "bad" : ""), tile(d.tasks.pending_review, t("t_review"), d.tasks.pending_review ? "warn" : "")),
+      h("div", { class: "grid2" },
+        h("div", { class: "card" }, h("div", { class: "label" }, t("agents_h")), h("div", {}, agents)),
+        h("div", { class: "stack" },
+          h("div", { class: "card" }, h("div", { class: "label" }, t("chart_h")), bars(d.hourly), h("div", { class: "axis" }, h("span", {}, "−24 h"), h("span", {}, t("just_now"))),
+            d.tools.length ? h("div", { class: "row gap" }, d.tools.map((x) => chip(`${x.tool} · ${x.count}`, "mute"))) : null),
+          h("div", { class: "card" }, h("div", { class: "label" }, t("recent_h")),
+            d.recent.length ? d.recent.map((r) => h("button", { class: "clickrow", onclick: async () => { act.selected = r.id; await show("activity"); openRun(r.id); } },
+              h("span", { class: "t" }, r.title), h("span", { class: "meta" }, r.blocked ? chip(t("blocked_n", { n: r.blocked }), "bad") : null, SOURCES[r.source] ? chip(SOURCES[r.source], "mute") : null, ago(r.last))))
+              : h("div", { class: "meta" }, t("no_runs"))))),
+      h("div", { class: "row gap" }, h("button", { class: "btn", onclick: () => { tk.selected = null; show("tasks"); } }, t("run_task")), h("button", { class: "btn plain", onclick: () => show("connectors") }, t("connect"))));
+  };
+  const load = async () => { try { db.data = await api("/api/insights"); } catch {} if (current === "dashboard" && box.isConnected) paint(); };
+  poll = setInterval(load, 5000);
+  load(); paint();
+  return [...head("dash_title", "dash_sub"), box];
+}
+
+/* ---------- tasks ---------- */
+let iso = { network_isolation: true, docker: false };
+const tk = { tasks: [], selected: null, detail: null, changes: null, changesFor: null, result: null, open: new Set(), picked: new Set(),
+  form: { tmpl: "custom", name: "", command: "", network: false, timeout: 600, backend: "local", image: "python:3.12-slim", pass_env: "" } };
+const stTone = { succeeded: "ok", failed: "bad", timeout: "bad", interrupted: "bad", running: "", queued: "mute", cancelled: "mute" };
+const isLive = (r) => r && ["queued", "running"].includes(r.status);
+async function loadTasks() {
+  try { tk.tasks = (await api("/api/tasks")).tasks; } catch { return; }
+  if (tk.selected) {
+    try { tk.detail = await api("/api/tasks/" + tk.selected); } catch { tk.detail = null; }
+    const d = tk.detail;
+    if (d && !isLive(d) && !d.discarded && d.changes && Object.values(d.changes).some(Boolean) && tk.changesFor !== d.id) {
+      tk.changesFor = d.id; tk.picked = new Set();
+      try { tk.changes = (await api(`/api/tasks/${d.id}/changes`)).changes; tk.changes.forEach((c) => { if (!c.protected) tk.picked.add(c.path); }); } catch { tk.changes = []; }
+    }
+  }
+  if (current === "tasks") paintTasks();
+}
+function paintTasks() {
+  const list = $("taskList"), view = $("taskView");
+  if (!list || !view) return;
+  list.replaceChildren(...(tk.tasks.length ? tk.tasks.map((r) => h("button", { "aria-current": r.id === tk.selected, onclick: () => { tk.selected = r.id; tk.detail = r; tk.changes = null; tk.changesFor = null; tk.result = null; loadTasks(); paintTasks(); } },
+    h("div", { class: "t" }, r.name), h("div", { class: "meta" }, chip(t("st_" + r.status), stTone[r.status] || ""), ago(r.created)))) : [h("div", { class: "empty" }, t("no_tasks"))]));
+  view.replaceChildren(...(tk.selected && tk.detail ? taskDetail(tk.detail) : [taskForm()]));
+  const log = view.querySelector(".log"); if (log) log.scrollTop = log.scrollHeight;
+}
+function taskForm() {
+  const f = tk.form, noIso = !iso.network_isolation && f.backend === "local";
+  const err = h("div", { class: "err" });
+  const bind = (k, num) => (e) => (f[k] = num ? +e.target.value : e.target.value);
+  const tmpl = h("div", { class: "seg small" }, [["custom", "tmpl_custom"], ["claude", "tmpl_claude"]].map(([id, key]) => h("button", { "aria-pressed": f.tmpl === id, onclick: () => {
+    f.tmpl = id;
+    if (id === "claude") Object.assign(f, { name: "Claude Code", command: 'claude -p "Describe what Claude Code should do"', network: true, pass_env: "ANTHROPIC_API_KEY" });
+    paintTasks();
+  } }, t(key))));
+  const seg_ = h("div", { class: "seg small" }, [["local", t("b_local")], ["docker", t("b_docker")]].map(([id, label]) => h("button", { "aria-pressed": f.backend === id, disabled: id === "docker" && !iso.docker, onclick: () => { f.backend = id; paintTasks(); } }, label)));
+  const net = h("input", { type: "checkbox", class: "switch", checked: noIso ? true : f.network, disabled: noIso, "aria-label": t("network_on"), onchange: (e) => (f.network = e.target.checked) });
+  const go = h("button", { class: "btn", onclick: async () => {
+    err.textContent = ""; go.disabled = true;
+    try {
+      const rec = await api("/api/tasks", { name: f.name || undefined, command: f.command, network: noIso ? true : f.network, timeout: f.timeout, backend: f.backend, image: f.image,
+        pass_env: f.pass_env.split(/[,\s]+/).filter(Boolean) });
+      tk.selected = rec.id; tk.detail = rec; tk.changes = null; tk.changesFor = null; tk.result = null; await loadTasks();
+    } catch (e) { err.textContent = e.message; go.disabled = false; }
+  } }, t("start"));
+  return h("div", { class: "card stack" }, h("div", { class: "row" }, h("h3", { style: "margin:0;flex:1;font-size:1.2rem" }, t("new_task")), tmpl),
+    h("div", {}, h("label", {}, t("task_name")), h("input", { type: "text", value: f.name, oninput: bind("name") })),
+    h("div", {}, h("label", {}, t("task_cmd")), h("textarea", { style: "min-height:90px", spellcheck: "false", placeholder: t("cmd_ph"), value: f.command, oninput: bind("command") })),
+    h("div", { class: "optgrid" }, h("div", {}, h("label", {}, t("backend")), seg_),
+      h("div", {}, h("label", {}, t("timeout_s")), h("input", { type: "number", min: 1, max: 3600, value: f.timeout, oninput: bind("timeout", true) })),
+      f.backend === "docker" ? h("div", {}, h("label", {}, t("image")), h("input", { type: "text", value: f.image, oninput: bind("image"), spellcheck: "false" })) : null,
+      h("div", {}, h("label", {}, t("pass_env")), h("input", { type: "text", placeholder: t("pass_env_ph"), value: f.pass_env, oninput: bind("pass_env"), spellcheck: "false" }))),
+    h("div", { class: "switchrow" }, net, h("span", {}, t("network_on"))),
+    h("div", { class: "meta" }, noIso ? t("iso_no") : iso.network_isolation || f.backend === "docker" ? t("iso_ok") : "", " ", f.backend === "local" && !iso.docker ? t("docker_no") : ""),
+    h("div", { class: "meta" }, t("env_note") + " " + t("review_hint")), h("div", { class: "row" }, go), err);
+}
+function diffView(text) {
+  const pre = h("pre", { class: "diff" });
+  for (const line of text.split("\n")) pre.append(h("span", { class: line.startsWith("+") && !line.startsWith("+++") ? "add" : line.startsWith("-") && !line.startsWith("---") ? "del" : line.startsWith("@@") ? "hunk" : "" }, line + "\n"));
+  return pre;
+}
+function taskDetail(d) {
+  const live = isLive(d), out = [];
+  out.push(h("div", { class: "card" }, h("div", { class: "row" }, h("h3", { style: "margin:0;flex:1;font-size:1.2rem" }, d.name), chip(t("st_" + d.status), stTone[d.status] || ""),
+    d.exit_code != null ? h("span", { class: "meta" }, t("exit_code", { n: d.exit_code })) : null,
+    live ? h("button", { class: "btn danger", onclick: async () => { try { await api(`/api/tasks/${d.id}/cancel`, {}); } catch (e) { alert(e.message); } } }, t("cancel")) : null),
+    h("div", { class: "meta", style: "margin:6px 0 10px" }, h("code", {}, d.command)), d.error ? h("div", { class: "err" }, d.error) : null,
+    h("div", { class: "label" }, t("output")), h("pre", { class: "log" }, d.log || (live ? "…" : t("no_output")))));
+  if (!live && !d.discarded) {
+    const ch = tk.changes;
+    const card = h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "label", style: "margin:0;flex:1" }, t("changes_h")), h("span", { class: "meta" }, t("review_hint"))));
+    if (!ch || !ch.length) card.append(h("div", { class: "meta", style: "padding:10px 0" }, ch ? t("no_changes") : "…"));
+    else {
+      card.append(...ch.map((c) => {
+        const cb = h("input", { type: "checkbox", checked: tk.picked.has(c.path), disabled: c.protected, "aria-label": c.path, onclick: (e) => e.stopPropagation(), onchange: (e) => (e.target.checked ? tk.picked.add(c.path) : tk.picked.delete(c.path)) });
+        const row = h("div", { class: "file", onclick: () => { tk.open.has(c.path) ? tk.open.delete(c.path) : tk.open.add(c.path); paintTasks(); } }, cb,
+          chip(t("ch_" + c.status), c.status === "deleted" ? "bad" : c.status === "added" ? "ok" : "warn"), h("span", { class: "mono grow" }, c.path), c.protected ? chip(t("protected_l"), "mute") : null);
+        return h("div", {}, row, tk.open.has(c.path) && c.diff ? diffView(c.diff) : null);
+      }));
+      card.append(h("div", { class: "row gap" }, h("button", { class: "btn", onclick: async () => {
+        try { tk.result = await api(`/api/tasks/${d.id}/apply`, { paths: [...tk.picked] }); tk.changesFor = null; tk.changes = null; await loadTasks(); } catch (e) { alert(e.message); }
+      } }, t("apply_sel"))));
+    }
+    if (tk.result) card.append(h("div", { class: "row gap" }, chip(`${t("applied")}: ${tk.result.applied.length}`, "ok"), ...tk.result.skipped.map((s_) => chip(`${t("skipped")}: ${s_.path} (${s_.reason})`, "mute"))));
+    card.append(h("div", { class: "row gap" }, h("button", { class: "btn danger", onclick: async () => { try { await api(`/api/tasks/${d.id}/discard`, {}); tk.changes = null; await loadTasks(); } catch (e) { alert(e.message); } } }, t("discard_env"))));
+    out.push(card);
+  }
+  return out;
+}
+function pageTasks() {
+  loadIso().then(() => { if (current === "tasks") paintTasks(); });
+  loadTasks();
+  poll = setInterval(() => { if (tk.tasks.some(isLive) || isLive(tk.detail)) loadTasks(); }, 1500);
+  setTimeout(paintTasks, 0);
+  return [...head("tasks_title", "tasks_sub"), h("div", { class: "split" },
+    h("div", {}, h("button", { class: "btn", style: "width:100%;margin-bottom:12px", onclick: () => { tk.selected = null; tk.detail = null; paintTasks(); } }, "+ " + t("new_task")), h("div", { class: "list card", id: "taskList" })),
+    h("div", { id: "taskView", class: "stack" }))];
+}
+async function loadIso() { try { iso = await api("/api/isolation"); } catch {} }
+
+/* ---------- connectors ---------- */
+const cn = { webhooks: [], edit: null, tested: {} };
+function pageConnectors() {
+  const agentBox = h("div", { class: "cards3" }), hookBox = h("div");
+  const paintAgents = () => agentBox.replaceChildren(...ag.list.map((a) => {
+    const b = h("button", { class: "btn plain", onclick: () => copyText(a.command, b) }, t("copy"));
+    return h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, a.name), chip(a.connected ? t("a_connected") : a.detected ? t("a_detected") : t("a_missing"), a.connected ? "ok" : a.detected ? "" : "mute")),
+      a.connected ? h("div", { class: "meta gap" }, h("code", {}, `agentlab disconnect ${a.id}`)) : h("div", { class: "row gap" }, h("code", { class: "grow mono" }, a.command), b));
+  }));
+  const saveAll = async (list) => { try { cn.webhooks = (await api("/api/connectors", { webhooks: list })).webhooks; cn.edit = null; } catch (e) { alert(e.message); } paintHooks(); };
+  const paintHooks = () => {
+    const rows = cn.webhooks.map((w) => {
+      const res = cn.tested[w.id];
+      return h("div", { class: "hook" }, h("div", { class: "info" }, h("div", {}, h("b", {}, w.name)), h("div", { class: "u" }, w.url), h("div", { class: "row", style: "margin-top:6px" }, w.events.map((e) => chip(t("ev_" + e), "mute")))),
+        h("div", { class: "row", style: "flex-wrap:nowrap" }, res ? chip(res.ok ? t("sent_ok") : t("send_fail"), res.ok ? "ok" : "bad") : null,
+          h("button", { class: "btn plain", onclick: async () => { try { cn.tested[w.id] = (await api("/api/connectors/test", { id: w.id })).results[0]; } catch (e) { cn.tested[w.id] = { ok: false }; } paintHooks(); } }, t("test_send")),
+          h("button", { class: "btn plain", onclick: () => { cn.edit = { ...w, secret: "" }; paintHooks(); } }, t("edit")),
+          h("button", { class: "btn danger", onclick: () => saveAll(cn.webhooks.filter((x) => x.id !== w.id)) }, t("remove"))));
+    });
+    const e = cn.edit;
+    const form = e && h("div", { class: "card stack", style: "margin-top:14px;background:var(--bg)" },
+      h("div", { class: "optgrid" }, h("div", {}, h("label", {}, t("task_name")), h("input", { type: "text", value: e.name || "", oninput: (ev) => (e.name = ev.target.value) })),
+        h("div", {}, h("label", {}, t("wh_url")), h("input", { type: "text", value: e.url || "", spellcheck: "false", placeholder: "https://hooks.slack.com/…", oninput: (ev) => (e.url = ev.target.value) }))),
+      h("div", {}, h("label", {}, t("wh_events")), h("div", { class: "row" }, ["blocked", "task_finished", "error"].map((ev) => h("label", { class: "switchrow", style: "margin:0" },
+        h("input", { type: "checkbox", class: "switch", checked: e.events.includes(ev), onchange: (x) => (e.events = x.target.checked ? [...new Set([...e.events, ev])] : e.events.filter((y) => y !== ev)) }), h("span", {}, t("ev_" + ev)))))),
+      h("div", {}, h("label", {}, t("wh_secret")), h("input", { type: "password", autocomplete: "off", placeholder: e.has_secret ? t("wh_secret_set") : "", oninput: (ev) => (e.secret = ev.target.value) })),
+      h("div", { class: "row" }, h("button", { class: "btn", onclick: () => {
+        const body = { id: e.id, name: e.name, url: e.url, events: e.events, ...(e.secret ? { secret: e.secret } : {}) };
+        saveAll([...cn.webhooks.filter((x) => x.id !== e.id).map(({ id, name, url, events }) => ({ id, name, url, events })), body]);
+      } }, t("save")), h("button", { class: "btn plain", onclick: () => { cn.edit = null; paintHooks(); } }, t("cancel"))));
+    hookBox.replaceChildren(h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between;margin-bottom:6px" }, h("span", { class: "meta" }, t("webhooks_hint")),
+      h("button", { class: "btn plain", onclick: () => { cn.edit = { name: "", url: "", events: ["blocked", "task_finished"], secret: "" }; paintHooks(); } }, "+ " + t("add_webhook"))),
+      rows.length ? h("div", { class: "rows" }, rows) : h("div", { class: "meta", style: "padding:8px 0" }, t("no_webhooks")), form));
+  };
+  loadAgents().then(paintAgents);
+  api("/api/connectors").then((r) => { cn.webhooks = r.webhooks; paintHooks(); }).catch(() => {});
+  paintAgents(); paintHooks();
+  return [...head("conn_title", "conn_sub"), h("h2", {}, t("agents_h")), agentBox, h("h2", {}, t("webhooks_h")), hookBox];
+}
+
+/* ---------- checks (regression + tripwires) ---------- */
+const ck = { tab: "regress" };
+function pageChecks() {
+  const tabs = h("div", { class: "seg", style: "margin-bottom:20px" }, [["regress", "tab_regress"], ["tripwires", "tab_tripwires"]].map(([id, key]) => h("button", { "aria-pressed": ck.tab === id, onclick: () => { ck.tab = id; renderPage(); } }, t(key))));
+  return [h("h1", {}, t("checks_title")), h("p", { class: "lead" }, t("checks_sub")), tabs, ...(ck.tab === "regress" ? pageRegress() : pageTripwires()).slice(2)];
+}
+
 /* ---------- settings + welcome ---------- */
 function seg(options, value, onpick, small) {
   return h("div", { class: "seg" + (small ? " small" : "") }, options.map(([id, label]) => h("button", { "aria-pressed": id === value, onclick: () => onpick(id) }, label)));
@@ -464,11 +662,13 @@ function renderWelcome(choice) {
   };
   draw(choice);
 }
-const dismissible = () => ["settings", "connect"].includes($("overlay").dataset.kind);
+const dismissible = () => $("overlay").dataset.kind === "settings";
 addEventListener("keydown", (e) => { if (e.key === "Escape" && dismissible()) closeOverlay(); });
 $("overlay").addEventListener("click", (e) => { if (e.target === $("overlay") && dismissible()) closeOverlay(); });
-addEventListener("focus", () => { if (current === "activity") loadAgents(); });
+addEventListener("focus", () => { if (current === "connectors") renderPage(); });
 $("openSettings").addEventListener("click", renderSettings);
+
+addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id !== current && TABS.some(([tab]) => tab === id)) show(id); });
 
 /* ---------- pages table + boot ---------- */
 const pages = {
@@ -476,10 +676,10 @@ const pages = {
     poll = setInterval(loadRuns, 3000);
     loadRuns().then(() => { if (act.selected) openRun(act.selected, true); });
     queueMicrotask(() => { paintRunList(); paintRun(); });
-    loadAgents();
-    return [...head("act_title", "act_sub"), h("div", { id: "agentStrip" }), h("div", { class: "split" }, h("div", { class: "list card", id: "runList" }), h("div", { class: "card", id: "runView" }, h("div", { class: "empty" }, t("select_run"))))];
+    return [...head("act_title", "act_sub"), h("div", { class: "split" }, h("div", { class: "list card", id: "runList" }), h("div", { class: "card", id: "runView" }, h("div", { class: "empty" }, t("select_run"))))];
   },
-  sandbox: pageSandbox, regress: pageRegress, tripwires: pageTripwires, pad: pagePad, api: pageApi,
+  dashboard: pageDashboard, tasks: pageTasks, connectors: pageConnectors, checks: pageChecks,
+  sandbox: pageSandbox, pad: pagePad, api: pageApi,
 };
 
 (async function boot() {
@@ -490,10 +690,11 @@ const pages = {
     S.lang = guess || "en";
   }
   applySettings();
-  const start = TABS.some(([id]) => "#" + id === location.hash) ? location.hash.slice(1) : "activity";
+  const start = TABS.some(([id]) => "#" + id === location.hash) ? location.hash.slice(1) : "dashboard";
   current = start;
   renderChrome();
   renderPage();
   if (first) renderWelcome(S.lang);
+  loadIso();
   api("/api/health").then(() => { $("status").classList.add("up"); renderChrome(); }).catch(() => renderChrome());
 })();

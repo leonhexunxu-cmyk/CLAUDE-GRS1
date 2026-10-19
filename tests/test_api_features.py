@@ -188,6 +188,11 @@ class I18nTests(unittest.TestCase):
         used = set(re.findall(r"""\bt\("([a-z_]+)\"""", js)) | set(re.findall(r'"(tab_\w+|\w+_title|\w+_sub)"', js))
         used |= {f"k_{k}" for k in ("prompt", "tool_call", "tool_result", "file_edit", "decision", "output", "error")}
         used |= {f"st_{s}" for s in ("fail", "drift", "missing", "new", "ok")} | {f"s_{s}" for s in ("correct", "contradicted", "unsupported", "unused")}
+        used |= set(re.findall(r'"(nav_\w+)"', js))
+        used |= {f"st_{x}" for x in ("queued", "running", "succeeded", "failed", "timeout", "cancelled", "interrupted")}
+        used |= {f"ch_{x}" for x in ("added", "modified", "deleted")} | {f"ev_{x}" for x in ("blocked", "task_finished", "error")}
+        used |= {f"r_{x}" for x in ("ok", "quiet", "errors", "blocks", "stalled", "hook_errors", "not_connected")}
+        used |= {f"h_{x}" for x in ("ok", "warn", "bad", "idle", "off")}
         used = {k for k in used if not k.endswith("_")}  # dynamic prefixes are expanded explicitly above
         self.assertEqual(sorted(used - set(en)), [])
 

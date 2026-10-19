@@ -42,12 +42,58 @@ What is verified and what is not:
 
 ## Dashboard
 
-`agentlab serve` opens a minimal, Apple-style dashboard:
+`agentlab serve` opens a minimal, Apple-style dashboard with a sidebar:
 
-- **First run:** pick your language (English, Español, Français, Deutsch, 简体中文, 日本語; your browser's language is pre-selected). Add a language by adding one object to `agentlab/ui/i18n.json`; a test checks every key is present.
-- **Settings (gear icon):** language, light/dark/auto, accent colour, text size, reduce motion, default code language, and Pad options. Stored in your browser.
-- **Pad:** a code scratchpad saved in `.agentlab/pads/`. JavaScript runs in an isolated sandbox with no network and a 5 second limit (Cmd/Ctrl+Enter). Other languages are for writing and copying.
-- **API:** generate a client for Python, JavaScript, TypeScript or curl, open it in the Pad, manage API keys, and browse every endpoint. The same description is served as OpenAPI at `/api/openapi.json`.
+| Section | What it does |
+|---|---|
+| **Dashboard** | Totals for the last 24 hours, a **health status per agent** with plain reasons, an hourly activity chart, top tools and recent sessions. Refreshes itself. |
+| **Activity** | Replay any recorded run step by step and fork it from any point. |
+| **Tasks** | Run commands in a **dedicated environment**, review the changes, apply only what you want. |
+| **Pad** | A code scratchpad saved with your project. JavaScript runs in an isolated browser sandbox; Python and shell can run in a dedicated environment. |
+| **Sandbox** | Write rules in plain language, test them against 12 attacks, enforce them through agent hooks. |
+| **Checks** | Regression tests for prompts, and tripwires that catch hallucinations. |
+| **Connectors** | Connect agents, and send **webhooks** (Slack, Discord or any service) when a call is blocked, a task finishes or something errors. |
+| **API** | Generate a client (Python, JavaScript, TypeScript, curl), manage optional API keys, browse every endpoint (OpenAPI at `/api/openapi.json`). |
+
+First run asks for your language (English, Español, Français, Deutsch, 简体中文, 日本語). The gear icon holds appearance, accent colour, text size and code preferences. To add a language, add one object to `agentlab/ui/i18n.json`; a test checks every key exists.
+
+### Agent health
+
+Health is computed from what agents actually did, not from a ping:
+
+- **Unhealthy**: errors are 10% or more of an agent's steps.
+- **Needs attention**: some errors, 30% or more of tool calls blocked by your policy (the agent keeps fighting your rules), a session stuck mid-task for over 5 minutes, or `agentlab hook` failing (hooks fail open, so failures are logged to `.agentlab/hook-errors.log` and surfaced here).
+- **Idle / Not connected**: no activity in 24 hours, or the agent was never connected.
+
+Also available as `agentlab insights` and `GET /api/insights`.
+
+### Dedicated environments (Tasks)
+
+```
+agentlab task run --pass-env ANTHROPIC_API_KEY --network 'claude -p "fix the failing test"'
+agentlab task run 'pytest -q'                 # network blocked by default
+agentlab task show <id>                       # diff of what it changed
+agentlab task apply <id>                      # copy the reviewed changes into your project
+```
+
+Each task works in its own disposable copy of the project under `.agentlab/tasks/<id>/`:
+
+- **Your project is not touched** until you apply. Apply refuses paths under `.agentlab/`, `.claude/`, `.kimi-code/`, `.git/`, `.mcp.json` and `.github/workflows/`, and any file you edited since the task began.
+- **Scrubbed environment**: only `PATH`, `LANG`, `TERM`, `TZ` plus variables you list with `--pass-env`; its own `HOME`; secret-looking files (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `.netrc` ...) are never copied in.
+- **Network blocked by default** using `unshare`. If this machine can't do that, the task refuses to start unless you allow the network or use `--docker`.
+- **Limits**: wall-clock timeout, CPU limit, no core dumps, and the whole process group is killed on timeout or cancel.
+- **Docker backend** (`--docker`): `--network none` unless allowed, 2 GB memory, 2 CPUs, 512 processes, runs as your user. It is only built and unit-tested here, not run against a Docker daemon.
+- **Agents stay governed**: hooks inside the copy record to your main `.agentlab/` and enforce its policy. (Not available in the Docker backend, where the agentlab CLI isn't installed.)
+
+Honest limits: this protects your files from accidents and keeps secrets and network out of reach by default. It is **not a security boundary against hostile code**; a local task shares your kernel and user. Use the Docker backend or a VM for untrusted code. Symlinks are never copied or applied.
+
+Running commands is the point of this feature, so the dashboard can run commands on your machine. It listens on `127.0.0.1` only, rejects other hosts and non-JSON requests, and creating an API key makes every other client authenticate. The dashboard session itself is trusted.
+
+### Webhooks
+
+Add them under **Connectors**. Each delivery is JSON with `text` (Slack) and `content` (Discord), an `X-AgentLab-Event` header, and, if you set a secret, an `X-AgentLab-Signature: sha256=<hmac>` header. Secrets are stored in `.agentlab/connectors.json` (mode 600) and never returned by the API. Webhook URLs are called from your machine, so only add endpoints you trust.
+
+### Other dashboard details
 
 ```
 agentlab apigen python > agentlab_client.py   # same generator from the command line
@@ -92,7 +138,9 @@ All routes are JSON, on localhost only. POST bodies must use `Content-Type: appl
 | `GET /api/runs`, `GET /api/runs/<id>` | list runs, read one |
 | `POST /api/runs/<id>/fork` `{step}` | fork from a step |
 | `POST /api/events` `{run, kind, content, tool?}` | ingest an event from any adapter |
-| `GET /api/agents` | which agents are detected and connected |
+| `GET /api/agents`, `GET /api/insights` | connection status; agent health and activity |
+| `GET/POST /api/tasks`, `GET /api/tasks/<id>`, `.../cancel`, `.../changes`, `.../apply`, `.../discard`, `GET /api/isolation` | dedicated environments |
+| `GET/POST /api/connectors`, `POST /api/connectors/test` | webhooks |
 | `GET/POST /api/policy` | read or save the project policy |
 | `GET/POST /api/pads`, `GET /api/pads/<id>`, `POST /api/pads/<id>/delete` | code pads |
 | `GET/POST /api/keys`, `POST /api/keys/<id>/revoke` | API keys |
