@@ -73,8 +73,9 @@ def update(project, pid, **fields):
         rec["name"] = str(fields["name"]).strip()[:80]
     if "description" in fields:
         rec["description"] = str(fields["description"])[:500]
-    if "agent" in fields:
-        rec["agent"] = fields["agent"]
+    for k in ("agent", "cloned_from", "batch"):
+        if k in fields:
+            rec[k] = fields[k]
     if fields.get("quota_mb") is not None:
         q = int(fields["quota_mb"])
         if not 1 <= q <= MAX_QUOTA_MB:
@@ -82,6 +83,19 @@ def update(project, pid, **fields):
         rec["quota_mb"] = q
     (_dir(project, pid) / "project.json").write_text(json.dumps(rec), encoding="utf-8")
     return rec
+
+
+def clone(project, pid, name=None):
+    """A new project with a copy of this one's workspace (symlinks are not copied). Used for isolated parallel runs."""
+    src = get(project, pid)
+    if usage(project, pid)["used_bytes"] > src["quota_mb"] * 1_000_000:
+        raise ProjectError("the project is over its quota")
+    rec = create(project, name or f"{src['name']} (copy)"[:80], src["description"], src["quota_mb"], src["kind"])
+    dst = workspace(project, rec["id"])
+    shutil.rmtree(dst)
+    shutil.copytree(workspace(project, pid), dst, symlinks=True, ignore=lambda d, names: [n for n in names if os.path.islink(os.path.join(d, n))])
+    update(project, rec["id"], cloned_from=pid)
+    return get(project, rec["id"])
 
 
 def workspace(project, pid):

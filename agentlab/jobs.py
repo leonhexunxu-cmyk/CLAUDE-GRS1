@@ -98,6 +98,33 @@ def safe_fetch(url, max_bytes=100_000, hops=3, timeout=15):
     raise ValueError("too many redirects")
 
 
+class Limiter:
+    """A concurrency limit that can be changed while jobs are running (queued jobs wait for a free slot)."""
+
+    def __init__(self, limit):
+        self._cond = threading.Condition()
+        self.limit, self.active = max(1, int(limit)), 0
+
+    def set_limit(self, n):
+        n = int(n)
+        if not 1 <= n <= 64:
+            raise JobError("the parallel limit must be between 1 and 64")
+        with self._cond:
+            self.limit = n
+            self._cond.notify_all()
+
+    def __enter__(self):
+        with self._cond:
+            while self.active >= self.limit:
+                self._cond.wait()
+            self.active += 1
+
+    def __exit__(self, *exc):
+        with self._cond:
+            self.active -= 1
+            self._cond.notify_all()
+
+
 class Runtime:
     def __init__(self, root, on_event=None, max_concurrent=4, approval_timeout=600, after_job=None, after_feedback=None):
         self.root = Path(root).resolve()
@@ -107,7 +134,7 @@ class Runtime:
         self.approval_timeout = approval_timeout
         self._lock = threading.RLock()
         self._cancel, self._wait, self._always = {}, {}, {}
-        self._sem = threading.BoundedSemaphore(max_concurrent)
+        self._sem = Limiter(max_concurrent)
         self.dir = data_dir(self.root) / "jobs"
         for j in self.list():
             if j["status"] in ("queued", "running", "waiting_approval"):
@@ -162,6 +189,12 @@ class Runtime:
         self._cancel[job["id"]] = threading.Event()
         threading.Thread(target=self._run, args=(job["id"],), daemon=True).start()
         return job
+
+    def concurrency(self, limit=None):
+        if limit is not None:
+            self._sem.set_limit(limit)
+        queued = sum(1 for j in self.list(limit=10_000) if j["status"] == "queued")
+        return {"limit": self._sem.limit, "running": self._sem.active, "queued": queued}
 
     def cancel(self, job_id):
         job = self.get(job_id)
