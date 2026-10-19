@@ -23,6 +23,12 @@ Use your agent as normal. Every prompt, tool call and edit is recorded under `.a
 
 agentlab only records in projects you have connected (those with a `.agentlab/` folder), even when an agent's hook is installed user-wide.
 
+## Watch the tour
+
+[![agentlab presentation](docs/media/poster.png)](docs/media/agentlab-presentation.mp4)
+
+`docs/media/agentlab-presentation.mp4` — 1 minute 47 seconds on what agentlab gives you and how to use it (real screens, no narration).
+
 ## Agent platform (`agentlab serve`, then open the dashboard)
 
 | Area | What you get |
