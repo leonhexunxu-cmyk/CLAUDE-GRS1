@@ -100,7 +100,7 @@ class KeyAuthTests(unittest.TestCase):
 
 class ApigenTests(Base):
     def test_every_spec_route_is_served(self):
-        for e in apigen.SPEC:
+        for e in apigen.all_spec():
             if e["name"] == "create_key":  # creating a key would lock this shared server; covered in KeyAuthTests
                 continue
             path = e["path"].replace("{run_id}", "abc").replace("{pad_id}", "deadbeef").replace("{key_id}", "deadbeef")

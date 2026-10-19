@@ -60,6 +60,12 @@ SPEC = [
     _e("openapi", "GET", "/api/openapi.json", "OpenAPI description of this API", client=False),
 ]
 
+def all_spec():
+    """The core routes plus the agent platform's (/api/lab/...)."""
+    from .platform_api import spec_entries
+    return SPEC + spec_entries()
+
+
 _BASE_OK = re.compile(r"^https?://[A-Za-z0-9._\-\[\]:]+(/[A-Za-z0-9._~/\-]*)?$")
 
 
@@ -79,7 +85,7 @@ def _camel(name):
 def openapi(version, base="http://127.0.0.1:8765"):
     types = {"integer": "integer", "number": "number", "boolean": "boolean", "string": "string", "object": "object", "array": "array"}
     paths = {}
-    for e in SPEC:
+    for e in all_spec():
         op = {"operationId": e["name"], "summary": e["summary"], "responses": {"200": {"description": "OK"}}}
         if _path_params(e):
             op["parameters"] = [{"name": p, "in": "path", "required": True, "schema": {"type": "string"}}
@@ -99,7 +105,7 @@ def generate(language, base_url="http://127.0.0.1:8765"):
         raise ValueError(f"language must be one of {list(LANGUAGES)}")
     if not valid_base_url(base_url):
         raise ValueError("base_url must look like http://host:port")
-    ops = [e for e in SPEC if e["client"]]
+    ops = [e for e in all_spec() if e["client"]]
     return {"python": _python, "javascript": _js, "typescript": _ts, "curl": _curl}[language](ops, base_url.rstrip("/"))
 
 

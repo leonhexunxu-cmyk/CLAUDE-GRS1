@@ -231,9 +231,13 @@ def save_plugin(root, spec):
 
 
 def delete_custom(root, kind, item_id):
+    if kind not in ("skills", "plugins"):
+        raise LibraryError("kind must be skills or plugins")
+    if not re.fullmatch(r"c-[a-z0-9_-]{1,60}", item_id or ""):
+        raise LibraryError(f"custom {kind[:-1]} not found", 404)
     p = _dir(root, kind) / f"{item_id}.json"
-    if not item_id.startswith("c-") or not p.exists():
-        raise LibraryError("not found", 404)
+    if not p.exists():
+        raise LibraryError(f"custom {kind[:-1]} not found", 404)
     p.unlink()
 
 

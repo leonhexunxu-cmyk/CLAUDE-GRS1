@@ -7,8 +7,9 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
+from urllib.parse import parse_qs
 
-from . import __version__, apigen, apikeys, connect as connect_mod, envs, insights, notify, pads, regress
+from . import __version__, apigen, apikeys, connect as connect_mod, envs, insights, llm, notify, pads, platform_api, regress
 from .hooks import data_dir
 from .recorder import append_event, fork_run, load_run, summarize_run
 from .sandbox import ATTACKS, parse_policy, simulate
@@ -32,8 +33,16 @@ class ApiError(Exception):
         self.code = code
 
 
-def make_server(project=".", port=8765):
+def _error_code(e):
+    code = getattr(e, "code", None)
+    code = code if isinstance(code, int) else getattr(e, "status", None)
+    return code if isinstance(code, int) and 400 <= code < 600 else 400
+
+
+def make_server(project=".", port=8765, background=True):
     project = Path(project).resolve()
+    lab = platform_api.Platform(project, background=background)
+    lab_exact, lab_patterned = platform_api.compile_routes(lab.routes())
     runs_dir = data_dir(project) / "runs"
     policy_file = data_dir(project) / "policy.txt"
     manager = envs.Manager(project, on_finish=lambda rec: notify.fire(
@@ -283,6 +292,9 @@ def make_server(project=".", port=8765):
             self.end_headers()
             self.wfile.write(data)
 
+        def _unlock(self):
+            return [t.strip() for t in self.headers.get("X-Agent-Unlock", "").split(",") if t.strip()]
+
         def _authorized(self, path):
             if path == "/api/health" or not apikeys.any_keys(project):
                 return True
@@ -295,7 +307,8 @@ def make_server(project=".", port=8765):
             try:
                 if self.headers.get("Host", "").rsplit(":", 1)[0] not in ("127.0.0.1", "localhost", "[::1]"):
                     raise ApiError("forbidden host", 403)
-                path = self.path.split("?")[0]
+                path, _, qs = self.path.partition("?")
+                query = {k: v[-1] for k, v in parse_qs(qs).items()}
                 if method == "GET" and path in ("/", "/index.html"):
                     html = ui_file("index.html").replace(b"__UI_TOKEN__", ui_token.encode())
                     return self._send(200, html, "text/html; charset=utf-8")
@@ -308,6 +321,18 @@ def make_server(project=".", port=8765):
                 if not self._authorized(path):
                     raise ApiError("API key required: send 'Authorization: Bearer <key>'", 401)
                 body = None
+                lab_route = lab_exact.get((method, path))
+                lab_args = ()
+                if not lab_route:
+                    for m, rx, fn, raw in lab_patterned:
+                        hit = rx.match(path)
+                        if m == method and hit:
+                            lab_route, lab_args = (fn, raw), hit.groups()
+                            break
+                if lab_route and lab_route[1]:  # raw upload: the body is the file
+                    length = int(self.headers.get("Content-Length") or 0)
+                    ctx = platform_api.Ctx(query, self._unlock(), self.rfile, length)
+                    return self._send(200, lab_route[0](ctx, {}, *lab_args))
                 if method == "POST":
                     if "application/json" not in self.headers.get("Content-Type", ""):
                         raise ApiError("Content-Type must be application/json", 415)
@@ -320,6 +345,8 @@ def make_server(project=".", port=8765):
                         raise ApiError("invalid JSON")
                     if not isinstance(body, dict):
                         raise ApiError("body must be a JSON object")
+                if lab_route:
+                    return self._send(200, lab_route[0](platform_api.Ctx(query, self._unlock()), body or {}, *lab_args))
                 fn = exact.get((method, path))
                 if fn:
                     return self._send(200, fn(body))
@@ -330,6 +357,12 @@ def make_server(project=".", port=8765):
                 raise ApiError("not found", 404)
             except ApiError as e:
                 self._send(e.code, {"error": str(e)})
+            except llm.LLMError as e:
+                self._send(502, {"error": str(e)})
+            except (ValueError, PermissionError, FileNotFoundError) as e:
+                self._send(404 if isinstance(e, FileNotFoundError) else 403 if isinstance(e, PermissionError) else _error_code(e), {"error": str(e) or type(e).__name__})
+            except (TypeError, KeyError, AttributeError):
+                self._send(400, {"error": "bad request: a field is missing or has the wrong type"})
             except Exception:
                 self._send(500, {"error": "internal error"})
 
@@ -339,7 +372,9 @@ def make_server(project=".", port=8765):
         def do_POST(self):
             self._handle("POST")
 
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    srv.lab = lab
+    return srv
 
 
 def serve_in_thread(project=".", port=0):
