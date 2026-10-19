@@ -46,6 +46,21 @@ def _get(event, *keys, default=""):
     return next((event[k] for k in keys if event.get(k) not in (None, "")), default)
 
 
+def _notify(root, event, text, data):
+    from . import notify
+    if notify.has_webhooks(root):
+        notify.fire(root, event, text, data)
+
+
+def log_error(message, cwd="."):
+    """Record a hook failure so the dashboard can show it (hooks fail open, so this is the only trace)."""
+    import time
+    root = find_project(cwd)
+    if root is not None:
+        with open(data_dir(root) / "hook-errors.log", "a", encoding="utf-8") as f:
+            f.write(f"{time.time()}\t{message[:300]}\n")
+
+
 def process(event, project):
     """Handle one hook payload from any agent. Returns (exit_code, message); exit code 2 blocks a tool call."""
     cwd = Path(event.get("cwd") or project)
@@ -70,6 +85,7 @@ def process(event, project):
             ok, why = policy.check_tool(tool, inp, str(cwd), str(root))
             if not ok:
                 append_event(run, "decision", f"BLOCKED {tool}: {why}", tool=tool, blocks_step=step)
+                _notify(root, "blocked", f"agentlab blocked {tool} ({source}): {why}", {"tool": tool, "reason": why, "session": session})
                 return 2, f"agentlab sandbox blocked this call: {why}"
     elif name == "PostToolUse":
         canon, _ = normalize(tool, inp)

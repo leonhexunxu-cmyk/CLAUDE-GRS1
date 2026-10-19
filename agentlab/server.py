@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
 
-from . import __version__, apigen, apikeys, connect as connect_mod, pads, regress
+from . import __version__, apigen, apikeys, connect as connect_mod, envs, insights, notify, pads, regress
 from .hooks import data_dir
 from .recorder import append_event, fork_run, load_run, summarize_run
 from .sandbox import ATTACKS, parse_policy, simulate
@@ -36,6 +36,9 @@ def make_server(project=".", port=8765):
     project = Path(project).resolve()
     runs_dir = data_dir(project) / "runs"
     policy_file = data_dir(project) / "policy.txt"
+    manager = envs.Manager(project, on_finish=lambda rec: notify.fire(
+        project, "task_finished", f"agentlab task “{rec['name']}” {rec['status']}" + (f" ({sum(rec['changes'].values())} file changes to review)" if rec.get("changes") and sum(rec["changes"].values()) else ""),
+        {"task": rec["id"], "status": rec["status"], "exit_code": rec["exit_code"]}))
     ui_token = secrets.token_urlsafe(16)  # injected into the page we serve; lets the UI through key checks
 
     def ui_file(name):
@@ -136,6 +139,53 @@ def make_server(project=".", port=8765):
     def agents(_):
         return {"agents": connect_mod.status(project)}
 
+    def task_call(fn):
+        """Run a task-manager call, turning its errors into API errors."""
+        try:
+            return fn()
+        except envs.TaskError as e:
+            raise ApiError(str(e), 404 if "not found" in str(e) else 400)
+
+    def list_tasks(_):
+        return {"tasks": manager.list()}
+
+    def create_task(body):
+        return task_call(lambda: manager.create(body))
+
+    def get_task(_, task_id):
+        return task_call(lambda: {**manager.get(task_id), "log": manager.log_tail(task_id)})
+
+    def cancel_task(_, task_id):
+        task_call(lambda: manager.cancel(task_id))
+        return {"cancelling": True}
+
+    def task_changes(_, task_id):
+        return task_call(lambda: {"changes": manager.changes(task_id)})
+
+    def apply_task(body, task_id):
+        paths = body.get("paths")
+        if paths is not None and not (isinstance(paths, list) and all(isinstance(p, str) for p in paths)):
+            raise ApiError("paths must be a list of strings")
+        return task_call(lambda: manager.apply(task_id, paths))
+
+    def discard_task(_, task_id):
+        return task_call(lambda: manager.discard(task_id))
+
+    def list_connectors(_):
+        return {"webhooks": notify.list_webhooks(project), "events": list(notify.EVENTS)}
+
+    def save_connectors(body):
+        try:
+            return {"webhooks": notify.save_webhooks(project, body.get("webhooks", []))}
+        except ValueError as e:
+            raise ApiError(str(e))
+
+    def test_connector(body):
+        hid = str(body.get("id", ""))
+        if not any(h["id"] == hid for h in notify.list_webhooks(project)):
+            raise ApiError("webhook not found", 404)
+        return {"results": notify.fire(project, "test", "agentlab test notification", {"test": True}, only_id=hid)}
+
     def list_pads(_):
         return {"pads": pads.list_pads(project)}
 
@@ -190,6 +240,13 @@ def make_server(project=".", port=8765):
         ("POST", "/api/tripwires/plant"): plant,
         ("POST", "/api/tripwires/audit"): audit,
         ("GET", "/api/agents"): agents,
+        ("GET", "/api/insights"): lambda b: insights.compute(project),
+        ("GET", "/api/isolation"): lambda b: envs.capabilities(),
+        ("GET", "/api/tasks"): list_tasks,
+        ("POST", "/api/tasks"): create_task,
+        ("GET", "/api/connectors"): list_connectors,
+        ("POST", "/api/connectors"): save_connectors,
+        ("POST", "/api/connectors/test"): test_connector,
         ("GET", "/api/pads"): list_pads,
         ("POST", "/api/pads"): save_pad,
         ("GET", "/api/keys"): list_keys,
@@ -199,6 +256,11 @@ def make_server(project=".", port=8765):
     patterned = [
         ("GET", re.compile(r"^/api/runs/([^/]+)$"), get_run),
         ("POST", re.compile(r"^/api/runs/([^/]+)/fork$"), fork),
+        ("GET", re.compile(r"^/api/tasks/([^/]+)$"), get_task),
+        ("POST", re.compile(r"^/api/tasks/([^/]+)/cancel$"), cancel_task),
+        ("GET", re.compile(r"^/api/tasks/([^/]+)/changes$"), task_changes),
+        ("POST", re.compile(r"^/api/tasks/([^/]+)/apply$"), apply_task),
+        ("POST", re.compile(r"^/api/tasks/([^/]+)/discard$"), discard_task),
         ("GET", re.compile(r"^/api/pads/([^/]+)$"), get_pad),
         ("POST", re.compile(r"^/api/pads/([^/]+)/delete$"), delete_pad),
         ("POST", re.compile(r"^/api/keys/([^/]+)/revoke$"), revoke_key),

@@ -32,6 +32,21 @@ SPEC = [
     _e("audit_answer", "POST", "/api/tripwires/audit", "Audit an answer against the canaries",
        [("seed", "string", True), ("answer", "string", True), ("n", "integer", False), ("expect_all", "boolean", False)]),
     _e("list_agents", "GET", "/api/agents", "Which agents are detected and connected"),
+    _e("get_insights", "GET", "/api/insights", "Agent health insights and activity totals"),
+    _e("get_isolation", "GET", "/api/isolation", "What isolation this machine can provide for tasks"),
+    _e("list_tasks", "GET", "/api/tasks", "List tasks"),
+    _e("create_task", "POST", "/api/tasks", "Run a command in a dedicated environment",
+       [("command", "string", True), ("name", "string", False), ("network", "boolean", False), ("timeout", "integer", False),
+        ("backend", "string", False), ("image", "string", False), ("pass_env", "array", False), ("files", "object", False),
+        ("include_git", "boolean", False)]),
+    _e("get_task", "GET", "/api/tasks/{task_id}", "Read a task and its output"),
+    _e("cancel_task", "POST", "/api/tasks/{task_id}/cancel", "Stop a running task"),
+    _e("task_changes", "GET", "/api/tasks/{task_id}/changes", "Files a task changed, with diffs"),
+    _e("apply_task", "POST", "/api/tasks/{task_id}/apply", "Apply a task's reviewed changes to the project", [("paths", "array", False)]),
+    _e("discard_task", "POST", "/api/tasks/{task_id}/discard", "Delete a task's environment"),
+    _e("list_connectors", "GET", "/api/connectors", "List webhook connectors"),
+    _e("save_connectors", "POST", "/api/connectors", "Save webhook connectors", [("webhooks", "array", True)]),
+    _e("test_connector", "POST", "/api/connectors/test", "Send a test notification", [("id", "string", True)]),
     _e("list_pads", "GET", "/api/pads", "List code pads"),
     _e("get_pad", "GET", "/api/pads/{pad_id}", "Read a code pad"),
     _e("save_pad", "POST", "/api/pads", "Create or update a code pad",
@@ -62,7 +77,7 @@ def _camel(name):
 
 
 def openapi(version, base="http://127.0.0.1:8765"):
-    types = {"integer": "integer", "number": "number", "boolean": "boolean", "string": "string", "object": "object"}
+    types = {"integer": "integer", "number": "number", "boolean": "boolean", "string": "string", "object": "object", "array": "array"}
     paths = {}
     for e in SPEC:
         op = {"operationId": e["name"], "summary": e["summary"], "responses": {"200": {"description": "OK"}}}
@@ -72,7 +87,7 @@ def openapi(version, base="http://127.0.0.1:8765"):
         if e["body"]:
             op["requestBody"] = {"content": {"application/json": {"schema": {
                 "type": "object",
-                "properties": {n: {"type": types[t]} for n, t, _ in e["body"]},
+                "properties": {n: ({"type": "array", "items": {}} if t == "array" else {"type": types[t]}) for n, t, _ in e["body"]},
                 "required": [n for n, _, r in e["body"] if r]}}}}
         paths.setdefault(e["path"], {})[e["method"].lower()] = op
     return {"openapi": "3.0.3", "info": {"title": "agentlab", "version": version},
@@ -125,7 +140,7 @@ def _python(ops, base):
 def _js(ops, base, ts=False):
     """JavaScript client; with ts=True, the same client with type annotations."""
     ann = (lambda x: f": {x}") if ts else (lambda x: "")
-    tmap = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean", "object": "Record<string, unknown>"}
+    tmap = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean", "object": "Record<string, unknown>", "array": "unknown[]"}
     out = ["// agentlab API client (generated). Works in Node 18+ and browsers.",
            "// Set AGENTLAB_API_KEY (Node) or pass apiKey if you created API keys.", "",
            "export class AgentLab {"]
@@ -165,7 +180,8 @@ def _ts(ops, base):
 
 
 _SAMPLES = {"rules": "allow read src/**\\nnever read .env", "kind": "decision", "action": "read", "target": "src/app.py",
-            "seed": "my-secret", "language": "javascript", "run": "my-run", "name": "Scratch", "content": "console.log(1)"}
+            "seed": "my-secret", "language": "javascript", "run": "my-run", "name": "Scratch", "content": "console.log(1)",
+            "command": "echo hello"}
 
 
 def _curl(ops, base):
@@ -175,11 +191,11 @@ def _curl(ops, base):
            "  else", '    curl -s -H "Content-Type: application/json" "$@"', "  fi", "}"]
     for e in ops:
         url = re.sub(r"\{(\w+)\}", lambda m: m.group(1).upper(), e["path"])
-        parts = {"string": '"example"', "integer": "1", "number": "0.8", "boolean": "false", "object": "{}"}
+        parts = {"string": '"example"', "integer": "1", "number": "0.8", "boolean": "false", "object": "{}", "array": "[]"}
         line = f'al -X {e["method"]} "$BASE{url}"'
         req = [(n, tp) for n, tp, r in e["body"] if r]
         if req:
             body = ", ".join(f'"{n}": ' + (f'"{_SAMPLES[n]}"' if n in _SAMPLES and tp == "string" else parts[tp]) for n, tp in req)
-            line += f" -d '{{{body}}}'"
+            line += " -d '" + f"{{{body}}}".replace("'", "'\\''") + "'"
         out += ["", f"# {e['summary']}", line]
     return "\n".join(out) + "\n"
