@@ -113,14 +113,22 @@ def compare(root, spec, chat_fn=None, workers=4):
         raise PlaygroundError("compare needs 2-8 targets")
     base = {k: v for k, v in spec.items() if k not in ("targets", "agent_id", "provider")}
 
-    def one(t):
-        label = str(t.get("label") or t.get("agent_id") or (t.get("provider") or {}).get("model") or "model")[:60]
+    labels = []
+    for t in targets:  # labels identify results (fastest, cheapest), so they must be unique
+        base_label = str(t.get("label") or t.get("agent_id") or (t.get("provider") or {}).get("model") or "model")[:60]
+        label, n = base_label, 2
+        while label in labels:
+            label, n = f"{base_label} #{n}", n + 1
+        labels.append(label)
+
+    def one(pair):
+        t, label = pair
         try:
             return {"label": label, "ok": True, **chat(root, {**base, **{k: t[k] for k in ("agent_id", "provider") if k in t}}, chat_fn)}
         except PlaygroundError as e:
             return {"label": label, "ok": False, "error": str(e)}
     with ThreadPoolExecutor(max_workers=min(workers, len(targets))) as ex:
-        results = list(ex.map(one, targets))
+        results = list(ex.map(one, zip(targets, labels)))
     ok = [r for r in results if r["ok"]]
     words = {r["label"]: set(re.findall(r"\w+", r["text"].lower())) for r in ok}
     for r in ok:

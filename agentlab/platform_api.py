@@ -196,7 +196,7 @@ class Platform:
             # agents
             ("GET", "/api/lab/agents", "lab_list_agents", "List your agents", [], lambda c, b: {"agents": [R._view(c, a) for a in agents.list_agents(root)]}),
             ("POST", "/api/lab/agents", "lab_create_agent", "Create an agent (optionally from a role preset)", [("name", S, True), ("provider", O, True), ("instructions", S, False), ("mode", S, False), ("role_preset", S, False)], agent_create),
-            ("GET", "/api/lab/agents/{agent_id}", "lab_get_agent", "Read an agent", [], lambda c, b, a: {**agents.public_view(need(c, a)), "private": privacy.is_private(root, a)}),
+            ("GET", "/api/lab/agents/{agent_id}", "lab_get_agent", "Read an agent", [], lambda c, b, a: (lambda rec: {**agents.public_view(rec), "history": [{k: h[k] for k in ("version", "reason", "ts")} for h in rec.get("history", [])], "private": privacy.is_private(root, a)})(need(c, a))),
             ("POST", "/api/lab/agents/{agent_id}", "lab_update_agent", "Change an agent", [("changes", O, False)], lambda c, b, a: (need(c, a), agents.public_view(agents.update(root, a, b)))[1]),
             ("POST", "/api/lab/agents/{agent_id}/delete", "lab_delete_agent", "Delete an agent", [], lambda c, b, a: (need(c, a), agents.delete(root, a), {"deleted": True})[2]),
             ("GET", "/api/lab/agents/{agent_id}/stats", "lab_agent_stats", "Agent analytics: jobs, success, tokens, health", [], lambda c, b, a: (need(c, a), agent_stats.stats(root, a))[1]),

@@ -12,7 +12,8 @@ const h = (tag, props = {}, ...kids) => {
     else if (k === "value" || k === "checked") later.push([k, v]);
     else el.setAttribute(k, v === true ? (k.startsWith("aria-") ? "true" : "") : v);
   }
-  el.append(...kids.flat(Infinity).filter((k) => k != null && k !== false).map((k) => (k.nodeType ? k : document.createTextNode(String(k)))));
+  const spaced = /\b(meta|insights)\b/.test(props.class || ""); // flex rows: give each text its own box so the gap applies
+  el.append(...kids.flat(Infinity).filter((k) => k != null && k !== false).map((k) => (k.nodeType ? k : spaced ? Object.assign(document.createElement("span"), { textContent: String(k) }) : document.createTextNode(String(k)))));
   for (const [k, v] of later) el[k] = v;
   return el;
 };
@@ -39,7 +40,14 @@ const copyText = async (text, btn) => {
 };
 
 /* ---------- settings + i18n ---------- */
-const DEFAULTS = { lang: null, theme: "auto", accent: "blue", size: "m", codeLang: "python", lineNumbers: true, wrap: false, reduceMotion: false };
+const DEFAULTS = { lang: null, theme: "auto", accent: "blue", size: "m", codeLang: "python", lineNumbers: true, wrap: false, reduceMotion: false,
+  gradient: "aurora", gradA: "#7f5af0", gradB: "#2cb67d", gradC: "", gradAngle: 135, gradButtons: false, gradBg: false, gradSide: false };
+const GRADIENTS = { aurora: ["#7f5af0", "#2cb67d"], sunset: ["#ff7e5f", "#feb47b"], ocean: ["#2193b0", "#6dd5ed"], candy: ["#ff6cab", "#7366ff"], forest: ["#134e5e", "#71b280"],
+  fire: ["#f12711", "#f5af19"], dusk: ["#2c3e50", "#fd746c"], mint: ["#00b09b", "#96c93d"], royal: ["#141e30", "#243b55"], peach: ["#ffd3a5", "#fd6585"], mono: ["#434343", "#8e9eab"] };
+const gradientCss = () => {
+  const c = S.gradient === "custom" ? [S.gradA, S.gradB, S.gradC].filter(Boolean) : GRADIENTS[S.gradient] || GRADIENTS.aurora;
+  return `linear-gradient(${+S.gradAngle || 135}deg, ${c.join(", ")})`;
+};
 const ACCENTS = { blue: ["#0071e3", "#0a84ff"], purple: ["#8944ab", "#bf5af2"], pink: ["#d30f5b", "#ff375f"], orange: ["#c93400", "#ff9f0a"], green: ["#248a3d", "#30d158"], graphite: ["#636366", "#98989d"] };
 const SIZES = { s: "14px", m: "15px", l: "17px" };
 const CODE_LANGS = ["python", "javascript", "typescript", "shell"];
@@ -57,6 +65,11 @@ function applySettings() {
   root.lang = S.lang || "en";
   root.style.setProperty("--accent", (ACCENTS[S.accent] || ACCENTS.blue)[theme === "dark" ? 1 : 0]);
   root.style.setProperty("--fs", SIZES[S.size] || SIZES.m);
+  const none = S.gradient === "none";
+  root.style.setProperty("--grad", none ? "var(--accent)" : gradientCss());
+  root.dataset.gbtn = !none && S.gradButtons ? "1" : "";
+  root.dataset.gbg = !none && S.gradBg ? "1" : "";
+  root.dataset.gside = !none && S.gradSide ? "1" : "";
 }
 function setSetting(patch) {
   Object.assign(S, patch);
@@ -89,9 +102,10 @@ const ICONS = {
 const icon = (id) => { const s_ = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s_.setAttribute("width", "18"); s_.setAttribute("height", "18"); s_.setAttribute("viewBox", "0 0 24 24"); s_.setAttribute("fill", "none"); s_.setAttribute("stroke", "currentColor"); s_.setAttribute("stroke-width", "1.7"); s_.setAttribute("stroke-linecap", "round"); s_.setAttribute("stroke-linejoin", "round"); s_.innerHTML = ICONS[id]; return s_; };
 let current = "dashboard", poll = null, leave = null;
 
+const navLabel = (k) => (k in I18N.en ? t(k) : typeof L === "function" ? L(k) : k); // platform pages (lab.js) use plain English keys
 function renderChrome() {
-  $("nav").replaceChildren(...NAV.map(([group, items]) => h("div", { class: "nav-group" }, h("div", { class: "nav-label" }, t(group)),
-    items.map(([id, key]) => h("button", { class: "nav-item", "aria-current": id === current, onclick: () => show(id) }, icon(id), h("span", {}, t(key)))))));
+  $("nav").replaceChildren(...NAV.map(([group, items]) => h("div", { class: "nav-group" }, h("div", { class: "nav-label" }, navLabel(group)),
+    items.map(([id, key]) => h("button", { class: "nav-item", "aria-current": id === current, onclick: () => show(id) }, icon(id), h("span", {}, navLabel(key)))))));
   $("openSettings").setAttribute("aria-label", t("settings"));
   $("status").title = $("status").classList.contains("up") ? t("connected") : t("offline");
 }
@@ -642,6 +656,16 @@ function renderSettings() {
       row(t("accent"), h("div", { class: "swatches" }, Object.entries(ACCENTS).map(([k, c]) => h("button", { style: `--c:${c[0]}`, "aria-pressed": S.accent === k, "aria-label": k, onclick: () => setSetting({ accent: k }) })))),
       row(t("text_size"), seg([["s", t("ts_s")], ["m", t("ts_m")], ["l", t("ts_l")]], S.size, (v) => setSetting({ size: v }), true)),
       row(t("reduce_motion"), toggle("reduceMotion"))),
+    h("h2", {}, "Gradients"),
+    h("div", { class: "group" },
+      h("div", { class: "grads" }, [...Object.keys(GRADIENTS), "custom", "none"].map((k) => h("button", { "aria-pressed": S.gradient === k, "aria-label": k, title: k, class: k === "none" ? "none" : "",
+        style: k === "none" ? "" : `background:${k === "custom" ? `linear-gradient(${S.gradAngle}deg, ${[S.gradA, S.gradB, S.gradC].filter(Boolean).join(", ")})` : `linear-gradient(135deg, ${GRADIENTS[k].join(", ")})`}`,
+        onclick: () => setSetting({ gradient: k }) }, k === "custom" ? "✎" : k === "none" ? "∅" : ""))),
+      S.gradient === "custom" ? row("Colours", h("div", { class: "row", style: "flex-wrap:nowrap" }, ["gradA", "gradB", "gradC"].map((k) => h("input", { type: "color", class: "color", value: S[k] || "#ffffff", "aria-label": k, onchange: (e) => setSetting({ [k]: e.target.value }) })),
+        S.gradC ? h("button", { class: "btn plain", onclick: () => setSetting({ gradC: "" }) }, "−") : null)) : null,
+      S.gradient === "custom" ? row("Angle", h("input", { type: "range", min: 0, max: 360, value: S.gradAngle, style: "max-width:180px", onchange: (e) => setSetting({ gradAngle: +e.target.value }) })) : null,
+      row("Gradient buttons", toggle("gradButtons")), row("Tinted background", toggle("gradBg")), row("Gradient sidebar", toggle("gradSide")),
+      h("div", { class: "grad-preview", style: "background:var(--grad)" }, "Preview")),
     h("h2", {}, t("g_code")),
     h("div", { class: "group" },
       row(t("code_lang"), h("select", { value: S.codeLang, onchange: (e) => setSetting({ codeLang: e.target.value }) }, CODE_LANGS.map((l) => h("option", { value: l }, PAD_LABEL[l])))),
@@ -682,7 +706,7 @@ const pages = {
   sandbox: pageSandbox, pad: pagePad, api: pageApi,
 };
 
-(async function boot() {
+addEventListener("DOMContentLoaded", async function boot() {  // after lab.js has added its pages
   try { I18N = await (await fetch("/static/i18n.json")).json(); } catch {}
   const first = !S.lang;
   if (first) {
@@ -690,11 +714,12 @@ const pages = {
     S.lang = guess || "en";
   }
   applySettings();
-  const start = TABS.some(([id]) => "#" + id === location.hash) ? location.hash.slice(1) : "dashboard";
+  const start = TABS.some(([id]) => "#" + id === location.hash) ? location.hash.slice(1) : pages.home ? "home" : "dashboard";
   current = start;
   renderChrome();
   renderPage();
   if (first) renderWelcome(S.lang);
   loadIso();
   api("/api/health").then(() => { $("status").classList.add("up"); renderChrome(); }).catch(() => renderChrome());
-})();
+  if (typeof loadBell === "function") { $("bell").addEventListener("click", openBell); loadBell(); }
+});

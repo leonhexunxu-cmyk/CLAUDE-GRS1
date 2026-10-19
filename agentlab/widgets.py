@@ -175,7 +175,7 @@ TEMPLATES = {
         "<h3>Convert</h3><div class=row><input id=v type=number value=1><select id=f></select><select id=t></select></div><div class=big id=o></div>",
         "const U={km:1000,m:1,cm:.01,mi:1609.344,ft:.3048,in:.0254};const f=document.getElementById('f'),t=document.getElementById('t');Object.keys(U).forEach(k=>{f.add(new Option(k,k));t.add(new Option(k,k))});t.value='mi';"
         "const go=()=>document.getElementById('o').textContent=(document.getElementById('v').value*U[f.value]/U[t.value]).toPrecision(6)+' '+t.value;[f,t,document.getElementById('v')].forEach(x=>x.oninput=go);go();")),
-    "pomodoro": ("Pomodoro timer", ["pomodoro", "focus", "countdown"], _page(
+    "pomodoro": ("Pomodoro timer", ["pomodoro", "focus", "countdown", "timer", "tomato"], _page(
         "<h3>Focus</h3><div class=big id=t>25:00</div><div class=row><button class=ac id=s>Start</button><button id=r>Reset</button></div>",
         "let s=1500,iv=null;const t=document.getElementById('t'),u=()=>t.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');"
         "document.getElementById('s').onclick=()=>{if(iv){clearInterval(iv);iv=null;return}iv=setInterval(()=>{if(--s<=0){clearInterval(iv);iv=null;s=0}u()},1000)};document.getElementById('r').onclick=()=>{clearInterval(iv);iv=null;s=1500;u()};")),

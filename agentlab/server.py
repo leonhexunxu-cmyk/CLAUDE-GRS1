@@ -23,8 +23,10 @@ CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inlin
        "frame-src 'self'; frame-ancestors 'none'")
 # The code pad runner executes user code inside a sandboxed iframe + worker with no network.
 RUNNER_CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; worker-src blob:; frame-ancestors 'self'"
-STATIC = {"style.css": "text/css", "app.js": "text/javascript", "i18n.json": "application/json",
-          "runner.html": "text/html"}
+# Widgets made by models run in a sandboxed frame that may run inline code but reach nothing (no network at all).
+WIDGET_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; frame-ancestors 'self'"
+STATIC = {"style.css": "text/css", "app.js": "text/javascript", "lab.js": "text/javascript", "i18n.json": "application/json",
+          "runner.html": "text/html", "widget.html": "text/html"}
 
 
 class ApiError(Exception):
@@ -315,7 +317,7 @@ def make_server(project=".", port=8765, background=True):
                 if method == "GET" and path.startswith("/static/") and path[8:] in STATIC:
                     name = path[8:]
                     return self._send(200, ui_file(name), STATIC[name] + "; charset=utf-8",
-                                      RUNNER_CSP if name == "runner.html" else CSP)
+                                      RUNNER_CSP if name == "runner.html" else WIDGET_CSP if name == "widget.html" else CSP)
                 if not path.startswith("/api/"):
                     raise ApiError("not found", 404)
                 if not self._authorized(path):

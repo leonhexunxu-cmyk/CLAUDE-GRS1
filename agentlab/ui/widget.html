@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<script>
+// Shows a widget made by a model. This frame is sandboxed (no same-origin) and its CSP blocks all network access,
+// so the widget can run its own scripts but cannot reach the app, your data or the internet.
+window.addEventListener("message", (e) => {
+  if (e.source !== parent || typeof e.data !== "string") return;
+  document.open();
+  document.write(e.data);
+  document.close();
+}, { once: true });
+parent.postMessage({ widgetReady: true }, "*");
+</script>
