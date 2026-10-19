@@ -20,7 +20,7 @@ from . import agents, danger, envs, knowledge, library, llm, memory, project_env
 from .hooks import data_dir
 from .recorder import append_event, load_run
 
-CATEGORY = {"list_files": "read", "read_file": "read", "write_file": "write", "delete_file": "write", "run_command": "run", "web_fetch": "network", "search_knowledge": "read",
+CATEGORY = {"list_files": "read", "read_file": "read", "write_file": "write", "delete_file": "write", "run_command": "run", "web_fetch": "network", "search_knowledge": "read", "ask_teammate": "read",
             "environment_info": "read", "environment_set_var": "environment", "environment_remove_var": "environment", "environment_install": "environment", "environment_network": "environment"}
 STATUSES = ("queued", "running", "waiting_approval", "succeeded", "failed", "cancelled", "stopped")
 FINAL = ("succeeded", "failed", "cancelled", "stopped")
@@ -55,6 +55,9 @@ def tool_specs(agent):
                   {"name": "environment_remove_var", "description": "Remove an environment variable from this project.", "parameters": obj({"name": s}, ["name"])},
                   {"name": "environment_install", "description": "Install Python packages into this project's virtual environment (needs network).", "parameters": obj({"packages": {"type": "array", "items": {"type": "string"}}}, ["packages"])},
                   {"name": "environment_network", "description": "Set the project's network policy: 'off' (offline) or 'allowed'. Turning it on always needs the user's approval.", "parameters": obj({"mode": s}, ["mode"])}]
+    if agent.get("teammates"):
+        specs.append({"name": "ask_teammate", "description": "Ask a specialist teammate for help and get their answer back. Use it when a part of the task is outside what you do best.",
+                      "parameters": obj({"teammate": s, "question": s}, ["teammate", "question"])})
     if agent.get("knowledge"):
         specs.append({"name": "search_knowledge", "description": "Search your knowledge bases (documents and web pages the user gave you).", "parameters": obj({"query": s}, ["query"])})
     if agent.get("memory_enabled"):
@@ -175,7 +178,7 @@ class Runtime:
         return sorted(out, key=lambda j: j["created"], reverse=True)[:limit]
 
     # ---- control ----
-    def start(self, project_id, agent_id, prompt, *, autonomous=False, overrides=None, schedule=None, step_mode=False):
+    def start(self, project_id, agent_id, prompt, *, autonomous=False, overrides=None, schedule=None, step_mode=False, deadline=None):
         prompt = str(prompt or "").strip()
         if not prompt or len(prompt) > 20000:
             raise JobError("a prompt is required (max 20,000 characters)")
@@ -187,7 +190,7 @@ class Runtime:
                "progress": {"percent": 0, "note": "", "step": 0, "max_steps": agent["limits"]["max_steps"]},
                "metrics": {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0, "tool_calls": 0, "tool_errors": 0, "approvals_asked": 0,
                            "approvals_denied": 0, "blocked": 0, "files_written": 0, "cost": 0.0, "duration_s": 0.0},
-               "summary": "", "error": None, "stop_reason": None, "pending": None, "debug": {"step_mode": bool(step_mode), "breakpoints": 0}}
+               "summary": "", "error": None, "stop_reason": None, "pending": None, "deadline": float(deadline) if deadline else None, "debug": {"step_mode": bool(step_mode), "breakpoints": 0}}
         self._save(job)
         self._cancel[job["id"]] = threading.Event()
         threading.Thread(target=self._run, args=(job["id"],), daemon=True).start()
@@ -377,6 +380,11 @@ class Runtime:
             if found:
                 system += "\n\nFrom your knowledge bases (search for more with search_knowledge):\n" + found
         tools = (tool_specs(agent) + [{k: v for k, v in t.items() if not k.startswith("_")} for t in library.plugin_tool_specs(self.root, agent.get("plugins", []))]) if agent.get("native_tools", True) else None
+        if job.get("deadline"):
+            left = job["deadline"] - time.time()
+            system += (f"\n\nYou have a deadline: about {max(0, int(left // 60))} minutes from now. Plan backwards from it. "
+                       "Do the part that matters most first, keep steps small, and call finish with whatever is genuinely done before time runs out "
+                       "rather than being cut off mid-task. Say in your summary what you did not get to.")
         messages = [{"role": "user", "content": job["prompt"]}]
         explicit = False
         for step in range(1, lim["max_steps"] + 1):
@@ -385,6 +393,10 @@ class Runtime:
             used = job["metrics"]["input_tokens"] + job["metrics"]["output_tokens"]
             if used >= lim["token_budget"]:
                 return self._finish(job, "stopped", stop_reason="token budget reached")
+            if job.get("deadline") and time.time() > job["deadline"]:
+                return self._finish(job, "stopped", stop_reason="deadline reached", summary=job.get("summary") or "")
+            if job.get("deadline") and job["deadline"] - time.time() < 60 and step > 1:
+                messages.append({"role": "user", "content": "Less than a minute of your deadline is left. Call finish now with what you have."})
             if lim["daily_token_cap"] and usage.tokens_today(self.root, agent["id"]) >= lim["daily_token_cap"]:
                 return self._finish(job, "stopped", stop_reason="daily token cap reached")
             job["progress"].update(step=step, max_steps=lim["max_steps"])
@@ -593,10 +605,54 @@ class Runtime:
             return "remembered", None
         if name == "recall":
             return memory.as_prompt(root, agent["id"], a["query"], 8) or "(nothing relevant)", None
+        if name == "ask_teammate":
+            return self._ask_teammate(job, agent, a), None
         if name == "search_knowledge":
             return knowledge.as_prompt(root, agent.get("knowledge", []), a["query"], 6, 8000) or "(nothing relevant)", None
         raise ValueError(f"unknown tool: {name}")
 
+
+    def _ask_teammate(self, job, agent, a):
+        """Agent swarm: one agent asks another for help. The teammate answers as a chat (no tools, no nesting),
+        inside the asking job's own token budget, so a swarm can never run away."""
+        want = str(a.get("teammate", "")).strip().lower()
+        mates = []
+        for tid in agent.get("teammates", [])[:8]:
+            try:
+                mates.append(agents.get(self.root, tid))
+            except agents.AgentError:
+                pass
+        mate = next((m for m in mates if m["id"] == want or m["name"].lower() == want), None)
+        if not mate:
+            return f"No teammate called {a.get('teammate')!r}. Yours are: {', '.join(m['name'] for m in mates) or '(none)'}."
+        question = str(a.get("question", "")).strip()[:8000]
+        if not question:
+            return "Ask the teammate an actual question."
+        left = agent["limits"]["token_budget"] - (job["metrics"]["input_tokens"] + job["metrics"]["output_tokens"])
+        if left < 500:
+            return "Not enough token budget left to ask a teammate."
+        system = agents.system_prompt(mate, job["project_name"], skills=library.skills_prompt(self.root, mate.get("skills", [])))
+        system += (f"\n\n{agent['name']} is working on: {job['prompt'][:600]}\nThey are asking you for help. Answer only the question, concretely and briefly. "
+                   "You cannot use tools here; give the knowledge or the plan they need.")
+        t0 = time.time()
+        try:
+            r = llm.chat(mate["provider"], system, [{"role": "user", "content": question}], None,
+                         max_tokens=min(mate["limits"]["max_output_tokens"], max(256, min(left // 2, 2000))), temperature=mate["limits"]["temperature"], project=self.root, retries=1)
+        except llm.LLMError as e:
+            return f"{mate['name']} could not answer: {e}"
+        u = r["usage"]
+        usage.record(self.root, agent=mate["id"], provider=mate["provider"]["type"], model=r.get("model") or mate["provider"]["model"], input_tokens=u["input"], output_tokens=u["output"],
+                     cost=llm.cost(mate["provider"], u), ms=(time.time() - t0) * 1000, job=job["id"], project_id=job["project"], kind="swarm")
+        with self._lock:
+            m = job["metrics"]
+            m["input_tokens"] += u["input"]
+            m["output_tokens"] += u["output"]
+            m["llm_calls"] += 1
+            m["cost"] = round(m["cost"] + llm.cost(mate["provider"], u), 6)
+            m["teammate_calls"] = m.get("teammate_calls", 0) + 1
+            self._save(job)
+        self._event(job, "output", f"asked {mate['name']}: {question[:200]}", tool="ask_teammate")
+        return f"{mate['name']} ({mate.get('role') or 'teammate'}) answered:\n{r['text']}"
 
     def _environment(self, job, agent, name, a):
         root, pid = self.root, job["project"]

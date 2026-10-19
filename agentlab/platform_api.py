@@ -6,6 +6,7 @@ tokens for private agents, the raw request stream for uploads) plus the body and
 
 import re
 import threading
+import time
 
 from . import (accounts, agent_stats, agentise, agents, analyze, batches, builders, commands, deploy, diary, docbuilder, dream, evals, evolution,
                hardware, importers, jobs, knowledge, library, llm, memory, model_tests, models, notifications, notify, packager, playground, privacy,
@@ -79,7 +80,9 @@ class Platform:
 
         def start_job(ctx, b):
             need(ctx, b.get("agent"))
-            return rt.start(b.get("project"), b.get("agent"), b.get("prompt"), autonomous=bool(b.get("autonomous")), overrides=b.get("overrides"), step_mode=bool(b.get("step_mode")))
+            dl = b.get("deadline_minutes")
+            deadline = (time.time() + max(1, min(float(dl), 7 * 24 * 60)) * 60) if dl else None
+            return rt.start(b.get("project"), b.get("agent"), b.get("prompt"), autonomous=bool(b.get("autonomous")), overrides=b.get("overrides"), step_mode=bool(b.get("step_mode")), deadline=deadline)
 
         def playground_chat(ctx, b):
             if b.get("agent_id"):
@@ -195,7 +198,7 @@ class Platform:
         return [
             # agents
             ("GET", "/api/lab/agents", "lab_list_agents", "List your agents", [], lambda c, b: {"agents": [R._view(c, a) for a in agents.list_agents(root)]}),
-            ("POST", "/api/lab/agents", "lab_create_agent", "Create an agent (optionally from a role preset)", [("name", S, True), ("provider", O, True), ("instructions", S, False), ("mode", S, False), ("role_preset", S, False)], agent_create),
+            ("POST", "/api/lab/agents", "lab_create_agent", "Create an agent (optionally from a role preset)", [("name", S, True), ("provider", O, True), ("instructions", S, False), ("mode", S, False), ("role_preset", S, False), ("teammates", A, False)], agent_create),
             ("GET", "/api/lab/agents/{agent_id}", "lab_get_agent", "Read an agent", [], lambda c, b, a: (lambda rec: {**agents.public_view(rec), "history": [{k: h[k] for k in ("version", "reason", "ts")} for h in rec.get("history", [])], "private": privacy.is_private(root, a)})(need(c, a))),
             ("POST", "/api/lab/agents/{agent_id}", "lab_update_agent", "Change an agent", [("changes", O, False)], lambda c, b, a: (need(c, a), agents.public_view(agents.update(root, a, b)))[1]),
             ("POST", "/api/lab/agents/{agent_id}/delete", "lab_delete_agent", "Delete an agent", [], lambda c, b, a: (need(c, a), agents.delete(root, a), {"deleted": True})[2]),
@@ -259,7 +262,7 @@ class Platform:
              lambda c, b: (b.get("agent") and need(c, b["agent"]), builders.create(root, b.get("template"), b.get("name"), runtime=rt if b.get("agent") else None, agent_id=b.get("agent"), prompt=b.get("prompt")))[1]),
             # jobs
             ("GET", "/api/lab/jobs", "lab_list_jobs", "List jobs (?project=&agent=&status=)", [], lambda c, b: {"jobs": rt.list(c.q("project"), c.q("agent"), c.q("status")), "concurrency": rt.concurrency()}),
-            ("POST", "/api/lab/jobs", "lab_start_job", "Give an agent a task in a project", [("project", S, True), ("agent", S, True), ("prompt", S, True), ("autonomous", B, False), ("overrides", O, False), ("step_mode", B, False)], start_job),
+            ("POST", "/api/lab/jobs", "lab_start_job", "Give an agent a task in a project", [("project", S, True), ("agent", S, True), ("prompt", S, True), ("autonomous", B, False), ("overrides", O, False), ("step_mode", B, False), ("deadline_minutes", I, False)], start_job),
             ("GET", "/api/lab/jobs/{job_id}", "lab_get_job", "A job with progress, metrics and recent events", [], lambda c, b, j: rt.get(j, events=int(c.q("events", 80)))),
             ("POST", "/api/lab/jobs/{job_id}/cancel", "lab_cancel_job", "Stop a job", [], lambda c, b, j: rt.cancel(j)),
             ("POST", "/api/lab/jobs/{job_id}/approve", "lab_decide", "Answer an approval request", [("approval", S, True), ("allow", B, True), ("always", B, False)], lambda c, b, j: (rt.decide(j, b.get("approval"), bool(b.get("allow")), bool(b.get("always"))), {"ok": True})[1]),

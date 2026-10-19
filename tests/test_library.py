@@ -49,12 +49,12 @@ class CatalogTests(LibCase):
 
     def test_role_preset_fills_gaps_but_explicit_choices_win_and_none_is_fine(self):
         merged = library.apply_role({"name": "Ada", "mode": "auto"}, "developer")
-        self.assertEqual((merged["name"], merged["mode"], merged["avatar"], "run_tests" in merged["plugins"]), ("Ada", "auto", "💻", True))
+        self.assertEqual((merged["name"], merged["mode"], merged["avatar"], "run_tests" in merged["plugins"]), ("Ada", "auto", "code", True))
         self.assertEqual(library.apply_role({"name": "x"}, None), {"name": "x"})
         with self.assertRaises(library.LibraryError):
             library.apply_role({}, "wizard")
         a = agentise.from_api(self.root, {"preset": "mock", "role_preset": "manager", "name": "Boss", "skip_test": True})
-        self.assertEqual((a["name"], a["avatar"], a["mode"], a["skills"], "git_status" in a["plugins"]), ("Boss", "🧭", "ask_risky", ["planning", "summarizer"], True))
+        self.assertEqual((a["name"], a["avatar"], a["mode"], a["skills"], "git_status" in a["plugins"]), ("Boss", "compass", "ask_risky", ["planning", "summarizer"], True))
         plain = agentise.from_api(self.root, {"preset": "mock", "name": "Plain", "skip_test": True})  # no preset: no role baggage
         self.assertEqual((plain["skills"], plain["plugins"], plain["instructions"]), ([], [], ""))
         with self.assertRaises(agentise.AgentiseError):

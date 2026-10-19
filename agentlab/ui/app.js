@@ -324,7 +324,7 @@ function runJs(code, onLine, onDone) {
     else if (e.data.done) finish();
     else if (e.data.level) onLine(e.data);
   };
-  timer = setTimeout(() => { onLine({ level: "error", text: "⏱ 5s" }); finish(); }, 5000);
+  timer = setTimeout(() => { onLine({ level: "error", text: "stopped after 5s" }); finish(); }, 5000);
   addEventListener("message", onMsg);
   document.body.append(frame);
 }
@@ -350,7 +350,7 @@ function pagePad() {
       else if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); queueSave.cancel(); savePad(); }
       else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); run(); }
     });
-    const runBtn = h("button", { class: "btn", title: p.language === "javascript" ? t("run_note") : t("only_js"), disabled: p.language !== "javascript", onclick: () => run() }, "▶ " + t("run"));
+    const runBtn = h("button", { class: "btn", title: p.language === "javascript" ? t("run_note") : t("only_js"), disabled: p.language !== "javascript", onclick: () => run() }, t("run"));
     const run = () => {
       if (p.language !== "javascript" || runBtn.disabled) return;
       runBtn.disabled = true;
@@ -438,7 +438,7 @@ function pageApi() {
         try { const r = await api("/api/keys", { label: label.value }); ap.fresh = r.key; label.value = ""; paintFresh(); await loadKeys(); } catch (e) { keyErr.textContent = e.message; }
       } }, t("generate_key"))), keyErr, fresh, h("div", { class: "gap" }, keyList)),
     h("h2", {}, t("endpoints")),
-    h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:flex-end;margin-bottom:4px" }, h("button", { class: "btn plain", onclick: () => ap.spec && download("agentlab-openapi.json", JSON.stringify(ap.spec, null, 2), "application/json") }, t("openapi") + " ↓")), endpoints)];
+    h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:flex-end;margin-bottom:4px" }, h("button", { class: "btn plain", onclick: () => ap.spec && download("agentlab-openapi.json", JSON.stringify(ap.spec, null, 2), "application/json") }, t("openapi"))), endpoints)];
 }
 
 /* ---------- dashboard ---------- */
@@ -660,7 +660,7 @@ function renderSettings() {
     h("div", { class: "group" },
       h("div", { class: "grads" }, [...Object.keys(GRADIENTS), "custom", "none"].map((k) => h("button", { "aria-pressed": S.gradient === k, "aria-label": k, title: k, class: k === "none" ? "none" : "",
         style: k === "none" ? "" : `background:${k === "custom" ? `linear-gradient(${S.gradAngle}deg, ${[S.gradA, S.gradB, S.gradC].filter(Boolean).join(", ")})` : `linear-gradient(135deg, ${GRADIENTS[k].join(", ")})`}`,
-        onclick: () => setSetting({ gradient: k }) }, k === "custom" ? "✎" : k === "none" ? "∅" : ""))),
+        onclick: () => setSetting({ gradient: k }) }, k === "custom" ? "C" : k === "none" ? "×" : ""))),
       S.gradient === "custom" ? row("Colours", h("div", { class: "row", style: "flex-wrap:nowrap" }, ["gradA", "gradB", "gradC"].map((k) => h("input", { type: "color", class: "color", value: S[k] || "#ffffff", "aria-label": k, onchange: (e) => setSetting({ [k]: e.target.value }) })),
         S.gradC ? h("button", { class: "btn plain", onclick: () => setSetting({ gradC: "" }) }, "−") : null)) : null,
       S.gradient === "custom" ? row("Angle", h("input", { type: "range", min: 0, max: 360, value: S.gradAngle, style: "max-width:180px", onchange: (e) => setSetting({ gradAngle: +e.target.value }) })) : null,

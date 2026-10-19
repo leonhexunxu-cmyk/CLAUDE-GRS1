@@ -22,17 +22,17 @@ AGENT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,47}$")
 LIMIT_RANGES = {"max_output_tokens": (16, 32768, 1024), "max_steps": (1, 200, 25), "token_budget": (1000, 10_000_000, 200_000), "step_timeout": (1, 600, 60), "context_tokens": (0, 2_000_000, 0)}
 
 ROLE_TEMPLATES = {
-    "coder": {"name": "Coder", "role": "Writes and fixes code", "avatar": "💻",
+    "coder": {"name": "Coder", "role": "Writes and fixes code", "avatar": "code",
               "instructions": "You are a careful senior engineer. Read the existing files before changing them, make small focused edits, run the code or tests to check your work, and explain what you changed."},
-    "researcher": {"name": "Researcher", "role": "Finds and summarises information", "avatar": "🔎",
+    "researcher": {"name": "Researcher", "role": "Finds and summarises information", "avatar": "search",
                    "instructions": "You research questions thoroughly, cite where facts came from, separate what you verified from what you assume, and write concise notes into the project."},
-    "planner": {"name": "Planner", "role": "Breaks goals into steps", "avatar": "🗺️",
+    "planner": {"name": "Planner", "role": "Breaks goals into steps", "avatar": "map",
                 "instructions": "You turn vague goals into a short, ordered plan with clear owners and checks. You keep the plan in PLAN.md and update it as work progresses."},
-    "reviewer": {"name": "Reviewer", "role": "Reviews work critically", "avatar": "🧐",
+    "reviewer": {"name": "Reviewer", "role": "Reviews work critically", "avatar": "search",
                  "instructions": "You review other people's work for correctness, risks and missing cases. Be specific and kind; point to exact files and lines; suggest fixes."},
-    "designer": {"name": "Designer", "role": "Designs interfaces and visuals", "avatar": "🎨",
+    "designer": {"name": "Designer", "role": "Designs interfaces and visuals", "avatar": "palette",
                  "instructions": "You design clean, accessible interfaces. Prefer simple layouts, readable type and good contrast. Produce working HTML/CSS."},
-    "tester": {"name": "Tester", "role": "Tries to break things", "avatar": "🧪",
+    "tester": {"name": "Tester", "role": "Tries to break things", "avatar": "flask",
                "instructions": "You write and run tests, look for edge cases and failure modes, and report reproducible bugs with the exact steps."},
 }
 
@@ -110,9 +110,9 @@ def validate(spec, existing=None):
         provider = llm.validate_provider(get("provider", llm.PRESETS["mock"]))
     except ValueError as e:
         raise AgentError(str(e))
-    return {"name": name, "role": str(get("role", ""))[:200], "avatar": str(get("avatar", "🤖"))[:8] or "🤖", "provider": provider,
+    return {"name": name, "role": str(get("role", ""))[:200], "avatar": str(get("avatar", "robot"))[:8] or "robot", "provider": provider,
             "instructions": instructions, "preferences": prefs, "mode": mode, "authorizations": auth, "limits": limits,
-            "skills": [str(x) for x in get("skills", [])][:20], "plugins": [str(x) for x in get("plugins", [])][:20], "knowledge": [str(x) for x in get("knowledge", []) if re.fullmatch(r"[a-f0-9]{8}", str(x))][:10], "dream": {k: dream[k] for k in ("enabled", "start", "end", "tz_minutes", "token_budget", "cycles")}, "environment_control": bool(get("environment_control", False)), "native_tools": bool(get("native_tools", True)), "protection": {"dangerous_commands": protection["dangerous_commands"]}, "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
+            "skills": [str(x) for x in get("skills", [])][:20], "plugins": [str(x) for x in get("plugins", [])][:20], "teammates": [str(x) for x in get("teammates", []) if AGENT_ID.match(str(x))][:8], "knowledge": [str(x) for x in get("knowledge", []) if re.fullmatch(r"[a-f0-9]{8}", str(x))][:10], "dream": {k: dream[k] for k in ("enabled", "start", "end", "tz_minutes", "token_budget", "cycles")}, "environment_control": bool(get("environment_control", False)), "native_tools": bool(get("native_tools", True)), "protection": {"dangerous_commands": protection["dangerous_commands"]}, "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
             "source": get("source", {"kind": "manual"})}
 
 

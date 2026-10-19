@@ -16,6 +16,64 @@ const lapi = async (path, body, raw) => {
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 };
+
+/* ---------- inline SVG icons (no emoji anywhere in the UI) ---------- */
+const ICON_PATHS = {
+  robot: '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+  code: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3"/>',
+  flask: '<path d="M9 3h6M10 3v6L5 18a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-9V3"/><path d="M7.5 14h9"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.5-1.8-.4-1.2.4-2.2 1.7-2.2H17a4 4 0 0 0 4-4c0-5-4-10-9-10z"/><circle cx="8" cy="12" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="16" cy="12" r="1"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="M9 12.5l2 2 4-4.5"/>',
+  wrench: '<path d="M15 4a5 5 0 0 0-5.8 6.6L4 15.8V20h4.2l5.2-5.2A5 5 0 0 0 20 9l-3 3-2.5-2.5 3-3A5 5 0 0 0 15 4z"/>',
+  pen: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M14.5 6.5l3 3"/>',
+  graduate: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/>',
+  map: '<path d="M9 4L3 7v13l6-3 6 3 6-3V4l-6 3z"/><path d="M9 4v13M15 7v13"/>',
+  target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  clip: '<path d="M20 11l-8.5 8.5a4.5 4.5 0 0 1-6.4-6.4L13 4.8a3 3 0 1 1 4.3 4.3l-8 8a1.5 1.5 0 0 1-2.1-2.1l7.5-7.5"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  warn: '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5h.01"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+  cross: '<path d="M6 6l12 12M18 6L6 18"/>',
+  up: '<path d="M7 11l3-7a2 2 0 0 1 3 2l-.8 5H19a2 2 0 0 1 2 2.4l-1.3 5A2 2 0 0 1 17.7 20H7z"/><rect x="3" y="11" width="4" height="9" rx="1"/>',
+  down: '<path d="M7 13l3 7a2 2 0 0 0 3-2l-.8-5H19a2 2 0 0 0 2-2.4l-1.3-5A2 2 0 0 0 17.7 4H7z"/><rect x="3" y="4" width="4" height="9" rx="1"/>',
+  pause: '<rect x="7" y="5" width="4" height="14" rx="1"/><rect x="13" y="5" width="4" height="14" rx="1"/>',
+  arrow: '<path d="M5 12h13M13 6l6 6-6 6"/>',
+  dot: '<circle cx="12" cy="12" r="5"/>',
+  puzzle: '<path d="M10 4h4a1 1 0 0 1 1 1v1.5a1.5 1.5 0 1 0 3 0V5h1a1 1 0 0 1 1 1v4h-1.5a1.5 1.5 0 1 0 0 3H20v4a1 1 0 0 1-1 1h-4v-1.5a1.5 1.5 0 1 0-3 0V18H7a1 1 0 0 1-1-1v-4H4.5a1.5 1.5 0 1 1 0-3H6V5a1 1 0 0 1 1-1z"/>',
+  brain: '<path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8A3 3 0 0 0 8 18a3 3 0 0 0 4 2V4.8A3 3 0 0 0 9 4zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8A3 3 0 0 1 16 18a3 3 0 0 1-4 2"/>',
+  build: '<path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M10 21v-5h4v5"/>',
+  game: '<rect x="2" y="7" width="20" height="11" rx="4"/><path d="M7 11v3M5.5 12.5h3M16 11.5h.01M18.5 14h.01"/>',
+  sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
+  face_good: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/>',
+  face_flat: '<circle cx="12" cy="12" r="9"/><path d="M8.5 15h7M9 9.5h.01M15 9.5h.01"/>',
+  face_sad: '<circle cx="12" cy="12" r="9"/><path d="M8.5 15.5a4.5 4.5 0 0 1 7 0M9 9.5h.01M15 9.5h.01"/>',
+  face_think: '<circle cx="12" cy="12" r="9"/><path d="M9 15h4M9 9.5h.01M15 9.5h.01"/>',
+  note: '<path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 11h8M8 15h5"/>',
+  box: '<path d="M3 8l9-4 9 4v8l-9 4-9-4z"/><path d="M3 8l9 4 9-4M12 12v8"/>',
+  plug: '<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/>',
+  rocket: '<path d="M12 3c3.5 2 5.5 5.5 5.5 9.5L14 16h-4l-3.5-3.5C6.5 8.5 8.5 5 12 3z"/><circle cx="12" cy="10" r="1.6"/><path d="M9 17l-2 4 4-2M15 17l2 4-4-2"/>',
+  home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+};
+const sico = (name, size = 18, cls = "") => {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  e.setAttribute("viewBox", "0 0 24 24"); e.setAttribute("width", size); e.setAttribute("height", size);
+  e.setAttribute("fill", "none"); e.setAttribute("stroke", "currentColor"); e.setAttribute("stroke-width", "1.7");
+  e.setAttribute("stroke-linecap", "round"); e.setAttribute("stroke-linejoin", "round"); e.setAttribute("aria-hidden", "true");
+  if (cls) e.setAttribute("class", cls);
+  e.innerHTML = ICON_PATHS[name] || ICON_PATHS.dot;
+  return e;
+};
+const AVATARS = ["robot", "compass", "code", "search", "flask", "palette", "chart", "globe", "shield", "wrench", "pen", "graduate", "map", "target", "chat", "brain", "rocket", "build"];
+const avatarIcon = (a, size = 18) => sico(AVATARS.includes(a) ? a : "robot", size);
+
 const LT = {
   es: { "Agent lab": "Laboratorio", Start: "Inicio", Agents: "Agentes", Projects: "Proyectos", Jobs: "Trabajos", Schedules: "Programación", Talk: "Conversar", Playground: "Zona de pruebas", Rooms: "Salas", Models: "Modelos", Training: "Entrenamiento", Knowledge: "Conocimiento", Build: "Construir", Templates: "Plantillas", Terminal: "Terminal", Insights: "Análisis", Usage: "Uso", Library: "Biblioteca" },
   fr: { "Agent lab": "Labo d'agents", Start: "Accueil", Agents: "Agents", Projects: "Projets", Jobs: "Tâches", Schedules: "Planification", Talk: "Discuter", Playground: "Bac à sable", Rooms: "Salons", Models: "Modèles", Training: "Entraînement", Knowledge: "Connaissances", Build: "Créer", Templates: "Modèles de projet", Terminal: "Terminal", Insights: "Analyses", Usage: "Consommation", Library: "Bibliothèque" },
@@ -85,7 +143,7 @@ async function loadLab(which = ["agents", "projects"]) {
   if (which.includes("secrets")) jobs_.push(lapi("/api/lab/secrets").then((r) => (LAB.secrets = r.secrets)).catch(() => {}));
   await Promise.all(jobs_);
 }
-const agentOpts = (blank) => [...(blank ? [["", blank]] : []), ...LAB.agents.map((a) => [a.id, `${a.avatar || "🤖"} ${a.name}${a.locked ? " 🔒" : ""}`])];
+const agentOpts = (blank) => [...(blank ? [["", blank]] : []), ...LAB.agents.map((a) => [a.id, `${a.name}${a.locked ? " (private)" : ""}`])];
 const projectOpts = (blank) => [...(blank ? [["", blank]] : []), ...LAB.projects.map((p) => [p.id, p.name])];
 const go = (page, state) => { if (state) Object.assign(NAVSTATE, state); show(page); };
 const NAVSTATE = {};
@@ -109,7 +167,7 @@ function openBell() {
       await lapi("/api/lab/notifications/read", { ids: [n.id] }).catch(() => {});
       closeOverlay(); loadBell();
       if (n.link?.page) go(n.link.page, { [n.link.page]: n.link.id });
-    } }, h("span", { class: "t" }, n.read ? "" : "● ", n.title), h("span", { class: "meta" }, chip(n.kind, tone[n.level]), ago(n.ts)))))
+    } }, h("span", { class: "t" }, n.read ? null : h("i", { class: "unread" }), n.title), h("span", { class: "meta" }, chip(n.kind, tone[n.level]), ago(n.ts)))))
       : h("div", { class: "empty" }, h("b", {}, "All quiet"), "Approvals, finished jobs, imports and training runs show up here.")));
 }
 
@@ -140,12 +198,12 @@ function pageHome() {
     fill(tut, h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, "Tutorial"), h("span", { class: "meta" }, `${n} of ${TUTORIAL.length} done`)),
       bar((100 * n) / TUTORIAL.length, "", "grad"),
       h("div", { class: "rows gap" }, TUTORIAL.map(([id, title, text, page], i) => h("div", { class: "step" + (done[id] ? " done" : "") },
-        h("span", { class: "num" }, done[id] ? "✓" : i + 1), h("div", { class: "grow" }, h("b", {}, title), h("div", { class: "meta" }, text)),
-        done[id] ? null : h("button", { class: "btn plain", onclick: () => go(page) }, "Go →")))));
+        h("span", { class: "num" }, done[id] ? "\u2713" : i + 1), h("div", { class: "grow" }, h("b", {}, title), h("div", { class: "meta" }, text)),
+        done[id] ? null : h("button", { class: "btn plain", onclick: () => go(page) }, "Open")))));
     fill(sug, ...(d.sugg.length ? [h("h2", {}, "Suggestions"), h("div", { class: "stack" }, d.sugg.slice(0, 6).map((s) => h("div", { class: "card sugg " + s.level },
       h("div", { class: "row", style: "justify-content:space-between;flex-wrap:nowrap" }, h("b", {}, s.title),
         h("div", { class: "row", style: "flex-wrap:nowrap" }, s.action?.page ? h("button", { class: "btn plain", onclick: () => go(s.action.page, { [s.action.page]: s.action.id }) }, s.action.label) : null,
-          h("button", { class: "btn plain", title: "Hide for a week", onclick: async () => { await lapi("/api/lab/suggestions/dismiss", { key: s.key }); load(); } }, "✕"))),
+          h("button", { class: "btn plain", title: "Hide for a week", onclick: async () => { await lapi("/api/lab/suggestions/dismiss", { key: s.key }); load(); } }, "\u00d7"))),
       h("div", { class: "meta", style: "margin-top:4px" }, s.text))))] : []));
     const live = d.jobs.filter((j) => LIVE.includes(j.status));
     fill(recent, h("div", { class: "label" }, live.length ? `Running now (${live.length})` : "Recent jobs"),
@@ -160,9 +218,9 @@ function pageHome() {
     go("jobs", { jobs: b.job?.id });
   }) }, "Try the demo");
   fill(quick, 
-    h("div", { class: "card quick" }, h("div", { class: "big" }, "🤖"), h("b", {}, "New agent"), h("div", { class: "meta" }, "Any model: API, local server or your own weights."), h("button", { class: "btn plain", onclick: () => go("agents", { agents: "new" }) }, "Create →")),
-    h("div", { class: "card quick" }, h("div", { class: "big" }, "🧩"), h("b", {}, "Build something"), h("div", { class: "meta" }, "Websites, games, models and infrastructure from templates."), h("button", { class: "btn plain", onclick: () => go("templates") }, "Browse →")),
-    h("div", { class: "card quick" }, h("div", { class: "big" }, "💬"), h("b", {}, "Playground"), h("div", { class: "meta" }, "Chat, compare models on one prompt, generate widgets."), h("button", { class: "btn plain", onclick: () => go("playground") }, "Open →")));
+    h("div", { class: "card quick" }, h("div", { class: "big" }, sico("robot", 34)), h("b", {}, "New agent"), h("div", { class: "meta" }, "Any model: API, local server or your own weights."), h("button", { class: "btn plain", onclick: () => go("agents", { agents: "new" }) }, "Create")),
+    h("div", { class: "card quick" }, h("div", { class: "big" }, sico("puzzle", 34)), h("b", {}, "Build something"), h("div", { class: "meta" }, "Websites, games, models and infrastructure from templates."), h("button", { class: "btn plain", onclick: () => go("templates") }, "Browse")),
+    h("div", { class: "card quick" }, h("div", { class: "big" }, sico("chat", 34)), h("b", {}, "Playground"), h("div", { class: "meta" }, "Chat, compare models on one prompt, generate widgets."), h("button", { class: "btn plain", onclick: () => go("playground") }, "Open")));
   load();
   poll = setInterval(load, 8000);
   return [h("div", { class: "hero" }, h("h1", {}, "Your agents, your models, one lab."), h("p", {}, "Build agents on any model, give them projects with their own space, let them work on a schedule, and see exactly what they do and cost."), h("div", { class: "row" }, demo, h("button", { class: "btn ghost", onclick: () => go("agents", { agents: "new" }) }, "Create an agent"))),
@@ -189,7 +247,7 @@ function providerEditor(state, onchange) {
         field("Provider", sel(Object.entries(P).map(([k, v]) => [k, v.label || k]), state.preset, (v) => { state.preset = v; state.model = P[v]?.model || ""; state.key = P[v]?.key || ""; state.base_url = undefined; paint(); onchange?.(); })),
         field("Model name", h("div", { class: "row", style: "flex-wrap:nowrap" }, inp(state.model, (v) => { state.model = v; onchange?.(); }, { list: models.id, placeholder: p.model || "model id" }), ["anthropic", "openai"].includes(p.type) ? listBtn : null), "Pick from the list, or type any model id."),
         p.type === "mock" || p.type === "cli" ? null : field("API key name", h("div", {}, inp(state.key, (v) => { state.key = v; onchange?.(); }, { list: "secretNames", placeholder: local ? "(not needed for local servers)" : "openai" }),
-          h("datalist", { id: "secretNames" }, LAB.secrets.map((s) => h("option", { value: s })))), "The name of a key saved under Models → Keys (never the key itself)."),
+          h("datalist", { id: "secretNames" }, LAB.secrets.map((s) => h("option", { value: s })))), "The name of a key saved under Models  Keys (never the key itself)."),
         p.type === "mock" || p.type === "cli" ? null : field("Base URL", inp(state.base_url ?? p.base_url ?? "", (v) => { state.base_url = v; onchange?.(); }, { placeholder: "https://…/v1" }))),
       h("details", {}, h("summary", {}, "Advanced: tools, tokenizer, CPU"),
         h("div", { class: "optgrid gap" },
@@ -225,7 +283,7 @@ function fromProvider(p) {
 const MODE_LABEL = { ask: "Ask before every action", ask_risky: "Ask only for risky actions", auto: "Full auto (no questions)" };
 const ag2 = { tab: "overview", draft: null };
 function agentForm(existing) {
-  const a = existing ? JSON.parse(JSON.stringify(existing)) : { name: "", role: "", avatar: "🤖", instructions: "", mode: "ask_risky", limits: { max_output_tokens: 1024, max_steps: 25, token_budget: 200000, temperature: null, daily_token_cap: null },
+  const a = existing ? JSON.parse(JSON.stringify(existing)) : { name: "", role: "", avatar: "robot", instructions: "", mode: "ask_risky", limits: { max_output_tokens: 1024, max_steps: 25, token_budget: 200000, temperature: null, daily_token_cap: null },
     preferences: { style: "balanced", language: "" }, memory_enabled: true, diary_enabled: true, evolve: "off", environment_control: false, skills: [], plugins: [], knowledge: [], protection: { dangerous_commands: "standard" },
     dream: { enabled: false, start: "02:00", end: "05:00", tz_minutes: -new Date().getTimezoneOffset(), token_budget: 20000, cycles: 2 }, provider: { type: "mock" } };
   const pv = fromProvider(a.provider);
@@ -234,9 +292,9 @@ function agentForm(existing) {
   const err = errBox(), kbs = { list: [] };
   const lib = LAB.presets?.library || { roles: [], skills: [], plugins: [] };
   const checks = (items, chosen) => h("div", { class: "checks" }, items.map((it) => h("label", { class: "check", title: it.description || it.role || "" },
-    h("input", { type: "checkbox", checked: chosen.includes(it.id), onchange: (e) => { const i = chosen.indexOf(it.id); if (e.target.checked && i < 0) chosen.push(it.id); if (!e.target.checked && i >= 0) chosen.splice(i, 1); } }), (it.avatar ? it.avatar + " " : "") + it.name)));
+    h("input", { type: "checkbox", checked: chosen.includes(it.id), onchange: (e) => { const i = chosen.indexOf(it.id); if (e.target.checked && i < 0) chosen.push(it.id); if (!e.target.checked && i >= 0) chosen.splice(i, 1); } }), it.name)));
   const kbBox = h("div");
-  lapi("/api/lab/knowledge").then((r) => { kbs.list = r.knowledge; fill(kbBox, r.knowledge.length ? checks(r.knowledge, a.knowledge) : h("div", { class: "meta" }, "No knowledge bases yet (Models → Knowledge).")); }).catch(() => {});
+  lapi("/api/lab/knowledge").then((r) => { kbs.list = r.knowledge; fill(kbBox, r.knowledge.length ? checks(r.knowledge, a.knowledge) : h("div", { class: "meta" }, "No knowledge bases yet (Models  Knowledge).")); }).catch(() => {});
   const save = h("button", { class: "btn", onclick: () => busy(save, async () => {
     const body = { ...a, provider: toProvider(pv) };
     if (role) body.role_preset = role;
@@ -249,7 +307,7 @@ function agentForm(existing) {
   const L_ = a.limits;
   return h("div", { class: "card stack" },
     h("h3", { class: "card-title" }, existing ? `Edit ${existing.name}` : "New agent"),
-    existing ? null : field("Start from a role (optional)", sel([["", "No preset role"], ...lib.roles.map((r) => [r.id, `${r.avatar} ${r.name} · ${r.role}`])], role, (v) => { role = v; const r = lib.roles.find((x) => x.id === v); if (r && !a.name) { a.name = r.name; renderPage(); } }), "Presets fill in instructions, skills, plugins and safe permissions; your own fields win."),
+    existing ? null : field("Start from a role (optional)", sel([["", "No preset role"], ...lib.roles.map((r) => [r.id, `${r.name} · ${r.role}`])], role, (v) => { role = v; const r = lib.roles.find((x) => x.id === v); if (r && !a.name) { a.name = r.name; renderPage(); } }), "Presets fill in instructions, skills, plugins and safe permissions; your own fields win."),
     h("div", { class: "optgrid" }, field("Name", inp(a.name, (v) => (a.name = v), { placeholder: "e.g. Site builder" })), field("Role", inp(a.role, (v) => (a.role = v), { placeholder: "What it is for" }))),
     field("Model", providerEditor(pv)),
     field("Custom instructions", h("textarea", { style: "min-height:110px;font-family:var(--font);font-size:.92rem", value: a.instructions, placeholder: "How it should work, what to avoid, house style…", oninput: (e) => (a.instructions = e.target.value) })),
@@ -272,20 +330,26 @@ function agentForm(existing) {
           field("Token budget per night", inp(a.dream.token_budget, (v) => (a.dream.token_budget = v), { type: "number", min: 1000 })), field("Dream cycles", inp(a.dream.cycles, (v) => (a.dream.cycles = v), { type: "number", min: 1, max: 5 }))),
         h("div", { class: "meta" }, "While dreaming the agent reviews its diary and memories, merges duplicates, writes insights and a plan. It never runs tools."))),
     h("details", {}, h("summary", {}, "Skills, plugins and knowledge"),
-      h("div", { class: "stack gap" }, h("label", {}, "Skills"), checks(lib.skills, a.skills), h("label", {}, "Plugins (tools)"), checks([...lib.plugins, { id: "widgets", name: "Widgets" }], a.plugins), h("label", {}, "Knowledge bases"), kbBox)),
+      h("div", { class: "stack gap" }, h("label", {}, "Skills"), checks(lib.skills, a.skills), h("label", {}, "Plugins (tools)"), checks([...lib.plugins, { id: "widgets", name: "Widgets" }], a.plugins), h("label", {}, "Knowledge bases"), kbBox,
+        h("label", { class: "gap" }, "Teammates it can ask for help (agent swarm)"),
+        h("div", { class: "checks" }, LAB.agents.filter((x) => !x.locked && x.id !== existing?.id).length
+          ? LAB.agents.filter((x) => !x.locked && x.id !== existing?.id).map((x) => h("label", { class: "check" },
+            h("input", { type: "checkbox", checked: (a.teammates || []).includes(x.id), onchange: (e) => { a.teammates = e.target.checked ? [...(a.teammates || []), x.id] : (a.teammates || []).filter((y) => y !== x.id); } }), x.name))
+          : h("span", { class: "meta" }, "Create another agent first.")),
+        h("div", { class: "meta" }, "A teammate answers one question as a chat, inside this agent's own token budget: no tools, no nesting, no runaway swarm."))),
     h("div", { class: "row" }, save, existing ? h("button", { class: "btn plain", onclick: () => { ag2.tab = "overview"; renderPage(); } }, t("cancel")) : null), err);
 }
 function unlockCard(a) {
   const pw = h("input", { type: "password", autocomplete: "off", placeholder: "Password" }), err = errBox();
   const b = h("button", { class: "btn", onclick: () => busy(b, async () => { UNLOCK[a.id] = (await lapi(`/api/lab/agents/${a.id}/unlock`, { password: pw.value })).token; await loadLab(["agents"]); renderPage(); }, err) }, "Unlock");
   pw.addEventListener("keydown", (e) => e.key === "Enter" && b.click());
-  return h("div", { class: "card stack" }, h("div", { class: "empty", style: "padding:20px" }, h("b", {}, `🔒 ${a.name} is private`), "Enter its password to use, view or change it. Unlocking lasts 30 minutes."), h("div", { class: "row" }, h("div", { class: "grow" }, pw), b), err);
+  return h("div", { class: "card stack" }, h("div", { class: "empty", style: "padding:20px" }, h("b", { class: "row", style: "justify-content:center;gap:8px" }, sico("lock", 18), `${a.name} is private`), "Enter its password to use, view or change it. Unlocking lasts 30 minutes."), h("div", { class: "row" }, h("div", { class: "grow" }, pw), b), err);
 }
 function agentDetail(a) {
   if (a.locked) return unlockCard(a);
   const body = h("div", { class: "stack" });
-  const top = h("div", { class: "card" }, h("div", { class: "row", style: "flex-wrap:nowrap" }, h("div", { class: "avatar" }, a.avatar || "🤖"),
-    h("div", { class: "grow" }, h("h3", { class: "card-title", style: "margin:0" }, a.name, a.private ? " 🔒" : ""), h("div", { class: "meta" }, a.role || "No role", "·", `${a.provider.label || a.provider.type} ${a.provider.model || ""}`, "·", MODE_LABEL[a.mode], "·", `v${a.version}`)),
+  const top = h("div", { class: "card" }, h("div", { class: "row", style: "flex-wrap:nowrap" }, h("div", { class: "avatar" }, avatarIcon(a.avatar, 26)),
+    h("div", { class: "grow" }, h("h3", { class: "card-title row", style: "margin:0;gap:8px" }, a.name, a.private ? sico("lock", 15) : null), h("div", { class: "meta" }, a.role || "No role", "·", `${a.provider.label || a.provider.type} ${a.provider.model || ""}`, "·", MODE_LABEL[a.mode], "·", `v${a.version}`)),
     h("button", { class: "btn", onclick: () => go("jobs", { jobs: "new", jobAgent: a.id }) }, "Give a job")));
   const T = [["overview", "Overview"], ["settings", "Settings"], ["memory", "Memory"], ["diary", "Diary"], ["improve", "Improve"], ["dreams", "Dreams"], ["privacy", "Privacy"]];
   const paint = async () => {
@@ -296,7 +360,7 @@ function agentDetail(a) {
         const s = await lapi(`/api/lab/agents/${a.id}/stats`);
         const tile = (num, lab, tone = "") => h("div", { class: "tile " + tone }, h("div", { class: "num" }, num), h("div", { class: "lab" }, lab));
         fill(body, h("div", { class: "tiles" }, tile(s.jobs.total, "jobs (30 days)"), tile(s.jobs.success_rate == null ? "–" : Math.round(s.jobs.success_rate * 100) + "%", "success", s.jobs.success_rate >= 0.8 ? "ok" : s.jobs.success_rate != null && s.jobs.success_rate < 0.5 ? "bad" : ""),
-          tile(fmtN(s.totals.input_tokens + s.totals.output_tokens), "tokens"), tile(money(s.totals.cost), "cost"), tile(fmtN(s.efficiency.avg_steps), "avg steps"), tile(`${s.feedback.up}/${s.feedback.down}`, "👍/👎"), tile(s.knowledge.memories, "memories"), tile(s.totals.approvals_asked, "approvals asked")),
+          tile(fmtN(s.totals.input_tokens + s.totals.output_tokens), "tokens"), tile(money(s.totals.cost), "cost"), tile(fmtN(s.efficiency.avg_steps), "avg steps"), tile(`${s.feedback.up}/${s.feedback.down}`, "good / poor ratings"), tile(s.knowledge.memories, "memories"), tile(s.totals.approvals_asked, "approvals asked")),
           h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, "Health"), chip(s.health.level, { ok: "ok", warn: "warn", bad: "bad" }[s.health.level] || "mute")),
             h("div", { class: "meta", style: "margin-top:6px" }, s.health.reasons.map((r) => reasonText(r)).join(" · ")),
             s.by_day.length ? h("div", { class: "gap" }, h("div", { class: "label" }, "Tokens per day"), barChart(s.by_day.map((d) => d.tokens || 0), (i, v) => `${s.by_day[i].date}: ${fmtN(v)}`)) : null),
@@ -316,9 +380,9 @@ function agentDetail(a) {
         const r = await lapi(`/api/lab/agents/${a.id}/diary`);
         const note = h("textarea", { style: "min-height:70px;font-family:var(--font)", placeholder: "Write a note in the diary (the agent reads it)" });
         const add = h("button", { class: "btn", onclick: () => busy(add, async () => { await lapi(`/api/lab/agents/${a.id}/diary`, { text: note.value }); paint(); }) }, "Add note");
-        const mood = { proud: "🥳", neutral: "😐", frustrated: "😣", curious: "🤔" };
+        const mood = { proud: "face_good", neutral: "face_flat", frustrated: "face_sad", curious: "face_think" };
         fill(body, h("div", { class: "card stack" }, note, h("div", {}, add)),
-          ...(r.entries.length ? r.entries.map((e) => h("div", { class: "card diary" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, (mood[e.mood] || "📝") + " " + e.title), h("span", { class: "meta" }, e.outcome ? chip(e.outcome, statusTone[e.outcome]) : null, ago(e.ts))),
+          ...(r.entries.length ? r.entries.map((e) => h("div", { class: "card diary" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", { class: "row", style: "gap:8px" }, sico(mood[e.mood] || "note", 16), e.title), h("span", { class: "meta" }, e.outcome ? chip(e.outcome, statusTone[e.outcome]) : null, ago(e.ts))),
             h("p", {}, e.body), e.lessons?.length ? h("div", {}, h("div", { class: "label" }, "Lessons"), h("ul", {}, e.lessons.map((l) => h("li", {}, l)))) : null)) : [h("div", { class: "card empty" }, "The diary is empty. Turn it on in Settings: the agent then reflects after every job.")]));
       } else if (tab === "improve") {
         const [p, ev] = await Promise.all([lapi(`/api/lab/agents/${a.id}/proposals`), lapi(`/api/lab/agents/${a.id}/evals`)]);
@@ -340,7 +404,7 @@ function agentDetail(a) {
               x.rationale ? h("p", { class: "meta" }, x.rationale) : null, x.changes?.length ? h("ul", {}, x.changes.map((c) => h("li", {}, c))) : null,
               h("details", {}, h("summary", {}, "New instructions"), h("pre", {}, x.instructions)),
               x.status === "pending" ? h("div", { class: "row" }, h("button", { class: "btn", onclick: async () => { await lapi(`/api/lab/agents/${a.id}/proposals/${x.id}/accept`, {}); await loadLab(["agents"]); paint(); } }, "Accept"),
-                h("button", { class: "btn plain", onclick: async () => { await lapi(`/api/lab/agents/${a.id}/proposals/${x.id}/reject`, {}); paint(); } }, "Reject")) : null))) : h("div", { class: "meta gap" }, "No proposals yet. They come from diary lessons and your 👍/👎 feedback.")),
+                h("button", { class: "btn plain", onclick: async () => { await lapi(`/api/lab/agents/${a.id}/proposals/${x.id}/reject`, {}); paint(); } }, "Reject")) : null))) : h("div", { class: "meta gap" }, "No proposals yet. They come from diary lessons and your ratings.")),
           ev.history.length ? h("div", { class: "card" }, h("div", { class: "label" }, "Auto-improvement history"), h("div", { class: "rows tight" }, ev.history.map((r) => h("div", { class: "kv" }, h("span", {}, chip(r.verdict, r.verdict === "accepted" ? "ok" : "bad"), " ", r.reason), h("span", { class: "meta" }, ago(r.ts)))))) : null,
           a.history?.length ? h("div", { class: "card" }, h("div", { class: "label" }, "Versions"), h("div", { class: "rows tight" }, [...a.history].reverse().slice(0, 10).map((v) => h("div", { class: "kv" }, h("span", {}, `v${v.version} · ${v.reason || ""}`),
             h("button", { class: "btn plain", onclick: async () => { await lapi(`/api/lab/agents/${a.id}/rollback`, { version: v.version }); await loadLab(["agents"]); toast("Rolled back", "ok"); paint(); } }, "Restore"))))) : null);
@@ -348,7 +412,7 @@ function agentDetail(a) {
         const r = await lapi(`/api/lab/agents/${a.id}/dreams`);
         const now = h("button", { class: "btn plain", onclick: () => busy(now, async () => { await lapi(`/api/lab/agents/${a.id}/dream`, {}); paint(); }) }, "Dream now");
         fill(body, h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("span", { class: "meta" }, a.dream.enabled ? `Sleeps ${a.dream.start}–${a.dream.end}` : "Dream mode is off (turn it on in Settings)."), now)),
-          ...(r.dreams.length ? r.dreams.map((d) => h("div", { class: "card diary" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, `🌙 Night of ${d.night}`), h("span", { class: "meta" }, (d.themes || []).map((x) => chip(x, "mute")), `${fmtN(d.tokens)} tokens`, d.merged ? `${d.merged} memories merged` : null)),
+          ...(r.dreams.length ? r.dreams.map((d) => h("div", { class: "card diary" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", { class: "row", style: "gap:8px" }, sico("moon", 16), `Night of ${d.night}`), h("span", { class: "meta" }, (d.themes || []).map((x) => chip(x, "mute")), `${fmtN(d.tokens)} tokens`, d.merged ? `${d.merged} memories merged` : null)),
             ...[["insights", "Insights"], ["ideas", "Ideas"], ["worries", "Worries"], ["plan_for_tomorrow", "Plan for tomorrow"]].map(([k, label]) => (d[k]?.length ? h("div", {}, h("div", { class: "label gap" }, label), h("ul", {}, d[k].map((x) => h("li", {}, x)))) : null)))) : [h("div", { class: "card empty" }, "No dreams yet.")]));
       } else if (tab === "privacy") {
         const pw = h("input", { type: "password", autocomplete: "new-password", placeholder: "New password (8+ characters)" }), cur = h("input", { type: "password", autocomplete: "current-password", placeholder: "Current password" }), err = errBox();
@@ -367,7 +431,7 @@ function pageAgents() {
   const paint = () => {
     const sel_ = NAVSTATE.agents;
     fill(list, ...(LAB.agents.length ? LAB.agents.map((a) => h("button", { "aria-current": a.id === sel_, onclick: () => { NAVSTATE.agents = a.id; ag2.tab = "overview"; renderPage(); } },
-      h("div", { class: "t" }, `${a.avatar || "🤖"} ${a.name}${a.private ? " 🔒" : ""}`), h("div", { class: "meta" }, a.locked ? "private" : `${a.provider.label || a.provider.type} · ${a.mode}`))) : [h("div", { class: "empty" }, "No agents yet.")]));
+      h("div", { class: "t row", style: "gap:8px" }, avatarIcon(a.avatar, 16), a.name, a.private ? sico("lock", 13) : null), h("div", { class: "meta" }, a.locked ? "private" : `${a.provider.label || a.provider.type} · ${a.mode}`))) : [h("div", { class: "empty" }, "No agents yet.")]));
     const a = LAB.agents.find((x) => x.id === sel_);
     fill(view, sel_ === "new" || !a ? agentForm(null) : agentDetail(a));
   };
@@ -426,9 +490,9 @@ function projectDetail(p) {
           h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "crumbs" }, crumbs.map((c, i) => h("button", { class: "btn plain", onclick: () => { pj.path = crumbs.slice(1, i + 1).join("/"); pj.file = null; paint(); } }, i ? c : "workspace"))),
             h("div", { class: "row" }, h("button", { class: "btn plain", onclick: () => fileIn.click() }, "Upload files"), fileIn)),
           r.entries.length ? h("div", { class: "rows tight" }, r.entries.map((e) => h("div", { class: "kv" },
-            h("button", { class: "linkish", onclick: async () => { const rel = (pj.path ? pj.path + "/" : "") + e.name; if (e.dir) { pj.path = rel; pj.file = null; paint(); } else { pj.file = await lapi(`/api/lab/projects/${p.id}/file?path=${encodeURIComponent(rel)}`); paint(); } } }, (e.dir ? "📁 " : "📄 ") + e.name),
+            h("button", { class: "linkish row", style: "gap:8px", onclick: async () => { const rel = (pj.path ? pj.path + "/" : "") + e.name; if (e.dir) { pj.path = rel; pj.file = null; paint(); } else { pj.file = await lapi(`/api/lab/projects/${p.id}/file?path=${encodeURIComponent(rel)}`); paint(); } } }, e.name),
             h("div", { class: "row", style: "flex-wrap:nowrap" }, e.dir ? null : h("span", { class: "meta" }, fmtB(e.size)),
-              h("button", { class: "btn danger", title: t("delete"), onclick: async () => { if (!confirm(`${t("confirm_delete")} ${e.name}`)) return; await lapi(`/api/lab/projects/${p.id}/file/delete`, { path: (pj.path ? pj.path + "/" : "") + e.name }); paint(); } }, "✕"))))) : h("div", { class: "meta", style: "padding:12px 0" }, "Empty folder. Upload files, import from GitHub or Hugging Face, or let an agent create them."),
+              h("button", { class: "btn danger", title: t("delete"), onclick: async () => { if (!confirm(`${t("confirm_delete")} ${e.name}`)) return; await lapi(`/api/lab/projects/${p.id}/file/delete`, { path: (pj.path ? pj.path + "/" : "") + e.name }); paint(); } }, "\u00d7"))))) : h("div", { class: "meta", style: "padding:12px 0" }, "Empty folder. Upload files, import from GitHub or Hugging Face, or let an agent create them."),
           h("div", { class: "row gap" }, h("div", { class: "grow" }, newName), h("button", { class: "btn plain", onclick: async () => { if (!newName.value) return; const rel = (pj.path ? pj.path + "/" : "") + newName.value; await lapi(`/api/lab/projects/${p.id}/file`, { path: rel, content: "" }); pj.file = { path: rel, content: "" }; paint(); } }, "New file"))), editor);
       } else if (pj.tab === "environment") {
         const full = await lapi(`/api/lab/projects/${p.id}`);
@@ -486,10 +550,10 @@ function projectDetail(p) {
           const r = await lapi(`/api/lab/projects/${p.id}/check`);
           const tone = { error: "bad", warn: "warn", info: "mute" };
           fill(out, h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, `Score ${r.score}/100`), h("span", { class: "meta" }, r.kind, r.python.works_on.length ? `Python ${r.python.works_on[0]}+` : "")), bar(r.score, "", r.score < 60 ? "bad" : r.score < 85 ? "warn" : "ok"),
-            ...[["Compatibility", r.compatibility], ["Optimisation", r.optimisation]].map(([title, items]) => h("div", { class: "gap" }, h("div", { class: "label" }, title), items.length ? h("div", { class: "rows tight" }, items.map((i) => h("div", {}, h("div", { class: "row" }, chip(i.level, tone[i.level]), h("span", {}, i.text)), i.path || i.fix ? h("div", { class: "meta" }, i.path ? h("code", {}, i.path) : null, i.fix ? "→ " + i.fix : null) : null))) : h("div", { class: "meta" }, "Nothing to report.")))));
+            ...[["Compatibility", r.compatibility], ["Optimisation", r.optimisation]].map(([title, items]) => h("div", { class: "gap" }, h("div", { class: "label" }, title), items.length ? h("div", { class: "rows tight" }, items.map((i) => h("div", {}, h("div", { class: "row" }, chip(i.level, tone[i.level]), h("span", {}, i.text)), i.path || i.fix ? h("div", { class: "meta" }, i.path ? h("code", {}, i.path) : null, i.fix ? " " + i.fix : null) : null))) : h("div", { class: "meta" }, "Nothing to report.")))));
         }, err) }, "Check compatibility & optimisation");
         const ver = inp("0.1.0", () => {}, { style: "width:110px" });
-        const pack = h("button", { class: "btn plain", onclick: () => busy(pack, async () => { const r = await lapi(`/api/lab/projects/${p.id}/package`, { version: ver.value }); fill(out, h("div", { class: "card" }, h("b", {}, `📦 ${r.path}`), h("div", { class: "meta" }, `${fmtB(r.bytes)} · ${r.files} files · added ${r.added.join(", ")}`, r.skipped.length ? `· left out ${r.skipped.length} (secrets, caches, logs)` : ""))); }, err) }, "Build package");
+        const pack = h("button", { class: "btn plain", onclick: () => busy(pack, async () => { const r = await lapi(`/api/lab/projects/${p.id}/package`, { version: ver.value }); fill(out, h("div", { class: "card" }, h("b", { class: "row", style: "gap:8px" }, sico("box", 16), r.path), h("div", { class: "meta" }, `${fmtB(r.bytes)} · ${r.files} files · added ${r.added.join(", ")}`, r.skipped.length ? `· left out ${r.skipped.length} (secrets, caches, logs)` : ""))); }, err) }, "Build package");
         const live = (await lapi(`/api/lab/deploys?project=${p.id}`));
         const mine = live.live.find((x) => x.project === p.id);
         const serve = h("button", { class: "btn", onclick: () => busy(serve, async () => { const r = mine ? (await lapi(`/api/lab/projects/${p.id}/serve/stop`, {}), null) : await lapi(`/api/lab/projects/${p.id}/serve`, {}); if (r) window.open(r.url, "_blank", "noopener"); paint(); }, err) }, mine ? "Stop localhost" : "Run on localhost");
@@ -498,7 +562,7 @@ function projectDetail(p) {
           h("div", { class: "checks" }, Object.keys(kinds).map((k) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: kinds[k], onchange: (e) => (kinds[k] = e.target.checked) }), { readme: "README", api: "API reference", guide: "User guide", changelog: "Changelog", contributing: "Contributing" }[k]))), h("div", {}, docs)),
           h("div", { class: "card stack" }, h("div", { class: "label" }, "Package & install"), h("div", { class: "row" }, check, h("span", { class: "meta" }, "version"), ver, pack), h("div", { class: "meta" }, "Packages leave out secrets, caches and logs, and include install.sh and install.ps1.")),
           h("div", { class: "card stack" }, h("div", { class: "label" }, "Deploy in one click"), h("div", { class: "row" }, serve, cf, mine ? h("a", { href: mine.url, target: "_blank", rel: "noopener" }, mine.url) : null),
-            h("div", { class: "meta" }, "Cloudflare needs keys named cloudflare_api_token and cloudflare_account (Models → Keys) and Node.js."),
+            h("div", { class: "meta" }, "Cloudflare needs keys named cloudflare_api_token and cloudflare_account (Models  Keys) and Node.js."),
             live.history.length ? h("div", { class: "rows tight" }, live.history.slice(0, 5).map((d) => h("div", { class: "kv" }, h("span", {}, chip(d.target, "mute"), " ", d.url ? h("a", { href: d.url, target: "_blank", rel: "noopener" }, d.url) : ""), h("span", { class: "meta" }, chip(d.status, d.status === "live" ? "ok" : "bad"), ago(d.started))))) : null),
           err, out);
       } else if (pj.tab === "import") {
@@ -546,7 +610,7 @@ function pageProjects() {
 /* ---------- jobs: progress, metrics, approvals, debugger, batches ---------- */
 const jb = { list: [], conc: null, detail: null, trace: null, showTrace: false, tab: "jobs", batches: [] };
 function jobForm() {
-  const f = { project: NAVSTATE.jobProject || LAB.projects[0]?.id || "", agent: NAVSTATE.jobAgent || LAB.agents.find((a) => !a.locked)?.id || "", prompt: "", step_mode: false, autonomous: false };
+  const f = { project: NAVSTATE.jobProject || LAB.projects[0]?.id || "", agent: NAVSTATE.jobAgent || LAB.agents.find((a) => !a.locked)?.id || "", prompt: "", step_mode: false, autonomous: false, deadline_minutes: "" };
   const err = errBox();
   const ta = h("textarea", { style: "min-height:110px;font-family:var(--font);font-size:.95rem", placeholder: "Describe the goal. You can also type a /command such as /review src/app.py", oninput: (e) => (f.prompt = e.target.value) });
   const start = h("button", { class: "btn", onclick: () => busy(start, async () => {
@@ -556,20 +620,22 @@ function jobForm() {
       if (x.kind === "shell") { const r = await lapi(`/api/lab/projects/${f.project}/command`, { line: prompt }); fill(err, h("pre", {}, `$ ${x.command}\n${r.output}\n(exit ${r.exit_code})`)); return; }
       prompt = x.text;
     }
-    const j = await lapi("/api/lab/jobs", { project: f.project, agent: f.agent, prompt, step_mode: f.step_mode, autonomous: f.autonomous });
+    const j = await lapi("/api/lab/jobs", { project: f.project, agent: f.agent, prompt, step_mode: f.step_mode, autonomous: f.autonomous, deadline_minutes: f.deadline_minutes || undefined });
     NAVSTATE.jobs = j.id; renderPage();
   }, err) }, "Start");
   if (!LAB.projects.length || !LAB.agents.length) return h("div", { class: "card empty" }, h("b", {}, "You need an agent and a project first."), h("div", { class: "row gap", style: "justify-content:center" }, h("button", { class: "btn", onclick: () => go("agents", { agents: "new" }) }, "New agent"), h("button", { class: "btn plain", onclick: () => go("templates") }, "New project")));
   return h("div", { class: "card stack" }, h("h3", { class: "card-title" }, "New job"),
     h("div", { class: "optgrid" }, field("Agent", sel(agentOpts(), f.agent, (v) => (f.agent = v))), field("Project", sel(projectOpts(), f.project, (v) => (f.project = v)))),
     field("Goal", ta),
+    field("Finish within (minutes, optional)", inp(f.deadline_minutes, (v) => (f.deadline_minutes = v), { type: "number", min: 1, placeholder: "no deadline" }),
+      "The agent is told its time budget, plans backwards from it and finishes with what is done rather than being cut off."),
     h("div", { class: "row" }, tog(f.step_mode, (v) => (f.step_mode = v), "Debug step by step"), tog(f.autonomous, (v) => (f.autonomous = v), "Autonomous (no one is watching)")),
     h("div", { class: "row" }, start), err);
 }
 function approvalCard(j) {
   const a = j.pending;
   const decide = (allow, always) => lapi(`/api/lab/jobs/${j.id}/approve`, { approval: a.id, allow, always }).then(() => setTimeout(loadJob, 200)).catch((e) => toast(e.message, "bad"));
-  return h("div", { class: "card approval" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, "⚠️ The agent asks for permission"), chip(a.category, "warn")),
+  return h("div", { class: "card approval" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", { class: "row", style: "gap:8px" }, sico("warn", 17), "The agent asks for permission"), chip(a.category, "warn")),
     h("div", { class: "gap" }, h("code", {}, a.tool), " ", h("pre", { class: "gap" }, JSON.stringify(a.arguments, null, 2))),
     a.risk?.length ? h("div", { class: "err" }, a.risk.join(" · ")) : null,
     h("div", { class: "row gap" }, h("button", { class: "btn", onclick: () => decide(true, false) }, "Allow once"), h("button", { class: "btn plain", onclick: () => decide(true, true) }, "Always allow in this job"), h("button", { class: "btn danger", onclick: () => decide(false, false) }, "Deny")));
@@ -581,7 +647,7 @@ function debugCard(j) {
     if (edit) { try { body.arguments = JSON.parse(args.value); } catch { return toast("The arguments are not valid JSON", "bad"); } }
     lapi(`/api/lab/jobs/${j.id}/debug`, body).then(() => setTimeout(loadJob, 250)).catch((e) => toast(e.message, "bad"));
   };
-  return h("div", { class: "card debug" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, `⏸ Paused before ${a.at === "tool" ? "a tool call" : "the next model call"} · step ${a.step}`), chip("debugger", "warn")),
+  return h("div", { class: "card debug" }, h("div", { class: "row", style: "justify-content:space-between" }, h("b", { class: "row", style: "gap:8px" }, sico("pause", 16), `Paused before ${a.at === "tool" ? "a tool call" : "the next model call"} · step ${a.step}`), chip("debugger", "warn")),
     a.at === "tool" ? h("div", { class: "stack gap" }, h("div", {}, h("code", {}, a.tool)), field("Arguments (edit them before it runs)", args)) : h("div", { class: "meta gap" }, `${a.messages} messages, about ${fmtN(a.context_tokens)} tokens of context.`),
     h("div", { class: "row gap" }, h("button", { class: "btn", onclick: () => act_("step", a.at === "tool") }, a.at === "tool" ? "Run this step" : "Step"),
       a.at === "tool" ? h("button", { class: "btn plain", onclick: () => act_("skip") }, "Skip this tool call") : null,
@@ -590,7 +656,7 @@ function debugCard(j) {
 function traceView(trace) {
   if (!trace?.length) return h("div", { class: "meta" }, "No steps yet.");
   return h("div", { class: "trace" }, trace.map((e) => h("div", { class: "tr " + e.phase },
-    h("div", { class: "n" }, e.step), h("div", {}, chip(e.phase === "model" ? "model" : e.tool, e.phase === "model" ? "" : e.skipped ? "mute" : e.edited ? "warn" : "ok"), h("div", { class: "t" }, `${e.ms} ms`, e.phase === "model" ? ` · ${fmtN(e.input_tokens)}→${fmtN(e.output_tokens)} tok` : "")),
+    h("div", { class: "n" }, e.step), h("div", {}, chip(e.phase === "model" ? "model" : e.tool, e.phase === "model" ? "" : e.skipped ? "mute" : e.edited ? "warn" : "ok"), h("div", { class: "t" }, `${e.ms} ms`, e.phase === "model" ? ` · ${fmtN(e.input_tokens)}${fmtN(e.output_tokens)} tok` : "")),
     h("div", { class: "c" }, e.phase === "model" ? [e.text || "", e.tool_calls?.length ? h("div", { class: "meta" }, "calls: " + e.tool_calls.map((c) => c.name).join(", ")) : null] : [h("div", { class: "mono" }, JSON.stringify(e.arguments)), h("div", { class: "res" }, e.result)]))));
 }
 async function loadJob() {
@@ -610,13 +676,14 @@ function paintJob() {
   fill(box, 
     h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between;flex-wrap:nowrap" }, h("div", { style: "min-width:0" }, h("div", { class: "meta" }, `${j.agent_name} · ${j.project_name}${j.autonomous ? " · autonomous" : ""}${j.schedule ? " · scheduled" : ""}`), h("b", {}, j.prompt.slice(0, 200))),
       h("div", { class: "row", style: "flex-wrap:nowrap" }, chip(j.status, statusTone[j.status]), live ? h("button", { class: "btn danger", onclick: () => lapi(`/api/lab/jobs/${j.id}/cancel`, {}).then(loadJob) }, t("cancel")) : null)),
-      h("div", { class: "gap" }, bar(j.progress.percent, j.progress.note, j.status === "failed" ? "bad" : "grad")), h("div", { class: "meta", style: "margin-top:6px" }, `${j.progress.percent}% · step ${j.progress.step} of ${j.progress.max_steps}`, j.progress.note ? `· ${j.progress.note}` : "")),
+      h("div", { class: "gap" }, bar(j.progress.percent, j.progress.note, j.status === "failed" ? "bad" : "grad")), h("div", { class: "meta", style: "margin-top:6px" }, `${j.progress.percent}% · step ${j.progress.step} of ${j.progress.max_steps}`, j.progress.note ? `· ${j.progress.note}` : "",
+        j.deadline ? chip(live ? `${Math.max(0, Math.round((j.deadline - Date.now() / 1000) / 60))} min left` : "had a deadline", live && j.deadline - Date.now() / 1000 < 120 ? "warn" : "mute") : null)),
     j.status === "waiting_approval" && j.pending ? approvalCard(j) : null,
     j.status === "paused" && j.pending ? debugCard(j) : null,
     h("div", { class: "tiles" }, tile(fmtN(m.input_tokens + m.output_tokens), "tokens"), tile(money(m.cost), "cost"), tile(m.llm_calls, "model calls"), tile(m.tool_calls, "tool calls"), tile(m.files_written, "files written"),
-      tile(m.approvals_asked, "approvals"), tile(m.blocked, "blocked", m.blocked ? "warn" : ""), tile(m.tool_errors, "tool errors", m.tool_errors ? "bad" : ""), tile(`${m.duration_s || 0}s`, "time")),
+      tile(m.approvals_asked, "approvals"), tile(m.blocked, "blocked", m.blocked ? "warn" : ""), tile(m.tool_errors, "tool errors", m.tool_errors ? "bad" : ""), tile(`${m.duration_s || 0}s`, "time"), m.teammate_calls ? tile(m.teammate_calls, "teammate answers") : null),
     j.summary || j.error || j.stop_reason ? h("div", { class: "card" }, h("div", { class: "label" }, j.error ? "Error" : j.stop_reason ? "Stopped" : "Result"), h("div", { class: j.error ? "err" : "" }, j.summary || j.error || j.stop_reason),
-      !live ? h("div", { class: "row gap" }, h("span", { class: "meta" }, "How did it do?"), h("button", { class: "btn plain", "aria-pressed": j.feedback?.rating === 1, onclick: () => fb(1) }, "👍"), h("button", { class: "btn plain", "aria-pressed": j.feedback?.rating === -1, onclick: () => fb(-1) }, "👎")) : null) : null,
+      !live ? h("div", { class: "row gap" }, h("span", { class: "meta" }, "How did it do?"), h("button", { class: "btn plain", "aria-pressed": j.feedback?.rating === 1, onclick: () => fb(1), "aria-label": "Good" }, sico("up", 16)), h("button", { class: "btn plain", "aria-pressed": j.feedback?.rating === -1, onclick: () => fb(-1), "aria-label": "Poor" }, sico("down", 16))) : null) : null,
     h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, jb.showTrace ? "Debugger trace" : "Events"),
       h("div", { class: "row" }, live ? h("button", { class: "btn plain", onclick: () => lapi(`/api/lab/jobs/${j.id}/step-mode`, { on: !j.debug?.step_mode }).then(loadJob) }, j.debug?.step_mode ? "Stop stepping" : "Pause & step") : null,
         h("button", { class: "btn plain", onclick: () => { jb.showTrace = !jb.showTrace; loadJob(); } }, jb.showTrace ? "Show events" : "Show debugger trace"))),
@@ -689,7 +756,7 @@ function pageSchedules() {
       list.length ? h("div", { class: "card" }, h("div", { class: "rows" }, list.map((s_) => h("div", {}, h("div", { class: "kv" }, h("div", {}, h("b", {}, s_.name), h("div", { class: "meta" }, s_.cron ? h("code", {}, s_.cron) : `every ${s_.every_minutes} min`, `· ${s_.runs} runs`, s_.next_run && s_.enabled ? `· next ${new Date(s_.next_run * 1000).toLocaleString(S.lang || undefined)}` : "", s_.note ? chip(s_.note, "warn") : null)),
         h("div", { class: "row", style: "flex-wrap:nowrap" }, h("input", { type: "checkbox", class: "switch", checked: s_.enabled, "aria-label": "Enabled", onchange: (e) => lapi(`/api/lab/schedules/${s_.id}`, { enabled: e.target.checked }).then(paint) }),
           s_.last_job ? h("button", { class: "btn plain", onclick: () => go("jobs", { jobs: s_.last_job }) }, "Last run") : null,
-          h("button", { class: "btn danger", onclick: () => lapi(`/api/lab/schedules/${s_.id}/delete`, {}).then(paint) }, "✕"))))))) : h("div", { class: "card empty" }, "No schedules yet."));
+          h("button", { class: "btn danger", onclick: () => lapi(`/api/lab/schedules/${s_.id}/delete`, {}).then(paint) }, "\u00d7"))))))) : h("div", { class: "card empty" }, "No schedules yet."));
   };
   paint();
   return [...lhead("Schedules", "Let agents work while you are away: every N minutes or on a cron schedule, with guardrails for unattended runs."), box];
@@ -749,11 +816,11 @@ function pagePlayground() {
     for (const f of e.target.files) { if (f.size > 100000) { toast(`${f.name} is too large (100 kB max per file)`, "bad"); continue; } pg.attachments.push({ name: f.name, content: await f.text() }); }
     paintFiles(); fileIn.value = "";
   } });
-  const paintFiles = () => fill(files, ...pg.attachments.map((a, i) => h("button", { class: "chip mute", title: "Remove", onclick: () => { pg.attachments.splice(i, 1); paintFiles(); } }, `📎 ${a.name} ✕`)));
+  const paintFiles = () => fill(files, ...pg.attachments.map((a, i) => h("button", { class: "chip mute", title: "Remove", onclick: () => { pg.attachments.splice(i, 1); paintFiles(); } }, `${a.name}  \u00d7`)));
   const insightsRow = (ins) => h("div", { class: "insights" }, `${fmtN(ins.input_tokens)} in · ${fmtN(ins.output_tokens)} out`, `${ins.latency_ms} ms`, `${ins.tokens_per_second} tok/s`, money(ins.cost), ins.context.window ? `context ${ins.context.percent}%` : null);
   const paintChat = () => {
     fill(chatBox, ...(pg.messages.length ? pg.messages.map((m, i) => {
-      if (m.role === "user") return h("div", { class: "msg user" }, h("div", { class: "bubble" }, m.content), m.files?.length ? h("div", { class: "meta" }, m.files.map((f) => "📎 " + f).join(" ")) : null);
+      if (m.role === "user") return h("div", { class: "msg user" }, h("div", { class: "bubble" }, m.content), m.files?.length ? h("div", { class: "meta" }, m.files.join(" · ")) : null);
       const r = pg.replies[i];
       if (!r) return null;
       const one = (x) => h("div", { class: "msg ai" }, h("div", { class: "who" }, x.label || x.model || ""), x.ok === false ? h("div", { class: "bubble err" }, x.error) : h("div", { class: "bubble" }, x.text || (x.widgets?.length ? "" : "…")),
@@ -792,7 +859,7 @@ function pagePlayground() {
       h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, pg.compare ? "Models to compare" : "Talk to"), tog(pg.compare, (v) => { pg.compare = v; if (v && pg.targets.length < 2) pg.targets.push({ kind: "model", agent_id: "", pv: { preset: "mock" } }); paintSetup(); }, "Compare on the same prompt")),
       ...pg.targets.map((tg, i) => h("div", { class: "target" }, h("div", { class: "row" }, seg([["agent", "Agent"], ["model", "Model"]], tg.kind, (v) => { tg.kind = v; paintSetup(); }, true),
         tg.kind === "agent" ? h("div", { class: "grow" }, sel(agentOpts("Choose an agent"), tg.agent_id, (v) => (tg.agent_id = v))) : null,
-        pg.compare && pg.targets.length > 2 ? h("button", { class: "btn danger", onclick: () => { pg.targets.splice(i, 1); paintSetup(); } }, "✕") : null),
+        pg.compare && pg.targets.length > 2 ? h("button", { class: "btn danger", onclick: () => { pg.targets.splice(i, 1); paintSetup(); } }, "\u00d7") : null),
         tg.kind === "model" ? providerEditor(tg.pv) : null)),
       pg.compare && pg.targets.length < 8 ? h("button", { class: "btn plain", onclick: () => { pg.targets.push({ kind: "model", agent_id: "", pv: { preset: "mock" } }); paintSetup(); } }, "+ Add a model") : null,
       h("details", {}, h("summary", {}, "Options"), h("div", { class: "stack gap" },
@@ -807,7 +874,7 @@ function pagePlayground() {
   loadLab(["agents", "presets", "secrets"]).then(() => { if (current === "playground") { paintSetup(); } });
   paintSetup(); paintChat();
   return [...lhead("Playground", "Chat with any model or agent, compare several on the same prompt, attach files, and get live widgets. Every answer shows its tokens, speed and cost."),
-    h("div", { class: "playground" }, setup, h("div", { class: "card chatcard" }, chatBox, files, h("div", { class: "composer-row" }, h("button", { class: "icon", title: "Attach text files", "aria-label": "Attach files", onclick: () => fileIn.click() }, "📎"), fileIn, input, h("button", { class: "btn", onclick: () => send() }, "Send"))))];
+    h("div", { class: "playground" }, setup, h("div", { class: "card chatcard" }, chatBox, files, h("div", { class: "composer-row" }, h("button", { class: "icon", title: "Attach text files", "aria-label": "Attach files", onclick: () => fileIn.click() }, sico("clip", 19)), fileIn, input, h("button", { class: "btn", onclick: () => send() }, "Send"))))];
 }
 
 /* ---------- rooms: agents talk and cooperate ---------- */
@@ -821,7 +888,7 @@ function pageRooms() {
     const f = { name: "", agents: [], mode: "task", goal: "", manager: "", max_turns: 10 }, err = errBox();
     const create = h("button", { class: "btn", onclick: () => busy(create, async () => { const r = await lapi("/api/lab/rooms", { ...f, manager: f.manager || undefined }); NAVSTATE.rooms = r.id; await paintList(); paintRoom(); }, err) }, "Create room");
     fill(view, h("div", { class: "card stack" }, h("h3", { class: "card-title" }, "New room"), field("Name", inp(f.name, (v) => (f.name = v), { placeholder: "Launch team" })),
-      field("Agents (2–8)", h("div", { class: "checks" }, LAB.agents.filter((a) => !a.locked).map((a) => h("label", { class: "check" }, h("input", { type: "checkbox", onchange: (e) => { f.agents = e.target.checked ? [...f.agents, a.id] : f.agents.filter((x) => x !== a.id); } }), `${a.avatar || "🤖"} ${a.name}`)))),
+      field("Agents (2–8)", h("div", { class: "checks" }, LAB.agents.filter((a) => !a.locked).map((a) => h("label", { class: "check" }, h("input", { type: "checkbox", onchange: (e) => { f.agents = e.target.checked ? [...f.agents, a.id] : f.agents.filter((x) => x !== a.id); } }), a.name)))),
       h("div", { class: "optgrid" }, field("Mode", sel([["task", "Cooperate on a goal"], ["chat", "Free conversation"]], f.mode, (v) => (f.mode = v))), field("Manager (speaks first and last)", sel(agentOpts("No manager"), f.manager, (v) => (f.manager = v)))),
       field("Goal", h("textarea", { style: "min-height:70px;font-family:var(--font)", placeholder: "Plan the launch of our app: name, tagline and a 3-step plan.", oninput: (e) => (f.goal = e.target.value) })),
       field("Max turns per run", inp(f.max_turns, (v) => (f.max_turns = v), { type: "number", min: 1, max: 60 })), h("div", {}, create), err,
@@ -838,7 +905,7 @@ function pageRooms() {
     const step = h("button", { class: "btn plain", onclick: () => busy(step, async () => { await lapi(`/api/lab/rooms/${r.id}/step`, {}); paintRoom(); }, err) }, "One turn");
     const colors = Object.fromEntries(r.agents.map((a, i) => [a, `hsl(${(i * 67 + 200) % 360} 65% 50%)`]));
     fill(view, h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("div", {}, h("b", {}, r.name), h("div", { class: "meta" }, chip(r.mode, "mute"), chip(r.status, statusTone[r.status]), `${r.metrics.turns} turns · ${fmtN(r.metrics.input_tokens + r.metrics.output_tokens)} tokens · ${money(r.metrics.cost)}`)),
-      h("div", { class: "row" }, step, run, r.running ? h("button", { class: "btn danger", onclick: () => lapi(`/api/lab/rooms/${r.id}/stop`, {}).then(paintRoom) }, "Stop") : null, h("button", { class: "btn danger", onclick: async () => { if (!confirm(t("confirm_delete"))) return; await lapi(`/api/lab/rooms/${r.id}/delete`, {}); NAVSTATE.rooms = null; paintList(); newRoom(); } }, "✕"))),
+      h("div", { class: "row" }, step, run, r.running ? h("button", { class: "btn danger", onclick: () => lapi(`/api/lab/rooms/${r.id}/stop`, {}).then(paintRoom) }, "Stop") : null, h("button", { class: "btn danger", onclick: async () => { if (!confirm(t("confirm_delete"))) return; await lapi(`/api/lab/rooms/${r.id}/delete`, {}); NAVSTATE.rooms = null; paintList(); newRoom(); } }, "\u00d7"))),
       r.goal ? h("div", { class: "meta gap" }, "Goal: " + r.goal) : null, err),
       r.result ? h("div", { class: "card result" }, h("div", { class: "label" }, `Result · by ${r.result.by}`), h("div", { class: "md" }, r.result.text),
         h("div", { class: "row gap" }, h("button", { class: "btn plain", onclick: () => { NAVSTATE.jobs = "new"; go("jobs"); setTimeout(() => { const ta = document.querySelector("#jobView textarea"); if (ta) { ta.value = r.result.text; ta.dispatchEvent(new Event("input")); } }, 300); } }, "Turn into a job"))) : null,
@@ -892,13 +959,13 @@ function pageModels() {
               field("Model name", h("div", { class: "row", style: "flex-wrap:nowrap" }, inp(api_.model, (v) => (api_.model = v), { list: "addModels", placeholder: P[api_.preset]?.model || "model id" }), ["openai", "anthropic"].includes(P[api_.preset]?.type) ? listBtn : null), modelsList),
               P[api_.preset]?.type === "cli" ? null : field("API key", h("input", { type: "password", autocomplete: "off", placeholder: P[api_.preset]?.key ? `saved as “${P[api_.preset].key}”` : "not needed for local servers", oninput: (e) => (api_.api_key = e.target.value) })),
               field("Base URL (optional)", inp(api_.base_url, (v) => (api_.base_url = v), { placeholder: P[api_.preset]?.base_url || "" })),
-              field("Preset role (optional)", sel([["", "No role"], ...roles.map((r) => [r.id, `${r.avatar} ${r.name}`])], api_.role_preset, (v) => (api_.role_preset = v)))),
+              field("Preset role (optional)", sel([["", "No role"], ...roles.map((r) => [r.id, r.name])], api_.role_preset, (v) => (api_.role_preset = v)))),
             h("div", {}, addApi), err1),
-          h("div", { class: "card stack" }, h("h3", { class: "card-title" }, "From your own weights"), h("div", { class: "meta" }, "A GGUF file in a project runs locally with llama-server or Ollama. Upload one, import it from Hugging Face (Projects → Import), or pick a file already there."),
+          h("div", { class: "card stack" }, h("h3", { class: "card-title" }, "From your own weights"), h("div", { class: "meta" }, "A GGUF file in a project runs locally with llama-server or Ollama. Upload one, import it from Hugging Face (Projects  Import), or pick a file already there."),
             h("div", { class: "optgrid" }, field("Project", sel(projectOpts(), w.project_id, (v) => (w.project_id = v))), field("Weights file", h("div", { class: "row", style: "flex-wrap:nowrap" }, inp(w.path, (v) => (w.path = v), { placeholder: "models/model.gguf" }), h("button", { class: "btn plain", onclick: () => pick.click() }, "Upload"), pick)),
               field("Agent name", inp(w.name, (v) => (w.name = v))), field("Runtime", sel([["llama-server", "llama.cpp server"], ["ollama", "Ollama"]], w.runtime, (v) => (w.runtime = v))),
               field("Run on", sel([["auto", "Auto"], ["cpu", "CPU only"], ["gpu", "GPU"]], w.device, (v) => (w.device = v))), field("CPU threads", inp(w.threads, (v) => (w.threads = v), { type: "number", min: 1, placeholder: "auto" })),
-              field("Preset role (optional)", sel([["", "No role"], ...roles.map((r) => [r.id, `${r.avatar} ${r.name}`])], w.role_preset, (v) => (w.role_preset = v)))), up, h("div", {}, addW), err2));
+              field("Preset role (optional)", sel([["", "No role"], ...roles.map((r) => [r.id, r.name])], w.role_preset, (v) => (w.role_preset = v)))), up, h("div", {}, addW), err2));
       } else if (md.tab === "accounts") {
         const st = await lapi("/api/lab/accounts");
         const names = { github: ["GitHub", "Import repositories; private ones too once connected."], huggingface: ["Hugging Face", "Download models and datasets, including gated ones."], openai: ["OpenAI (GPT)", "Use GPT models; lists the models your key can use."], anthropic: ["Anthropic (Claude)", "Use Claude models; lists the models your key can use."] };
@@ -989,7 +1056,7 @@ function pageKnowledge() {
       h("div", { class: "card stack" }, h("div", { class: "label" }, "Search"), h("div", { class: "row" }, h("div", { class: "grow" }, q), search), res),
       h("div", { class: "card" }, h("div", { class: "label" }, "Sources"), k.sources.length ? h("div", { class: "rows tight" }, k.sources.map((s_) => h("div", { class: "kv" }, h("div", {}, h("div", {}, s_.title), h("div", { class: "meta" }, chip(s_.kind, "mute"), `${s_.chunks} chunks`, s_.url ? h("a", { href: s_.url, target: "_blank", rel: "noopener" }, s_.url) : null)),
         h("button", { class: "btn danger", onclick: () => lapi(`/api/lab/knowledge/${k.id}/sources/${s_.id}/delete`, {}).then(() => { paintKb(); paintList(); }) }, t("remove"))))) : h("div", { class: "meta" }, "Nothing yet.")),
-      h("div", { class: "meta" }, "Link this knowledge base to an agent under Agents → Settings → Skills, plugins and knowledge. The agent then gets matching passages and a search tool."));
+      h("div", { class: "meta" }, "Link this knowledge base to an agent under Agents  Settings  Skills, plugins and knowledge. The agent then gets matching passages and a search tool."));
   };
   paintList().then(paintKb);
   return [...lhead("Knowledge", "Give agents knowledge: paste text, add project files or scrape web pages. Passages are embedded and the best matches are handed to the agent."), h("div", { class: "split" }, h("div", {}, h("button", { class: "btn", style: "width:100%;margin-bottom:12px", onclick: () => { NAVSTATE.knowledge = null; paintKb(); } }, "+ New knowledge base"), list), view)];
@@ -997,7 +1064,7 @@ function pageKnowledge() {
 
 /* ---------- templates gallery + builders ---------- */
 const tp = { kind: "all", list: [] };
-const KIND_ICON = { website: "🌐", game: "🎮", model: "🧠", infra: "🏗️" };
+const KIND_ICON = { website: "globe", game: "game", model: "brain", infra: "build" };
 function pageTemplates() {
   const grid = h("div", { class: "cards3" }), err = errBox();
   const paint = () => fill(grid, ...tp.list.filter((x) => tp.kind === "all" || x.kind === tp.kind).map((x) => {
@@ -1010,18 +1077,18 @@ function pageTemplates() {
         closeOverlay(); await loadLab(["projects"]); toast("Project created", "ok");
         if (r.job) go("jobs", { jobs: r.job.id }); else go("projects", { projects: r.project.id });
       }, e2) }, withAi ? "Create and build with AI" : "Create project");
-      fill(ov, h("div", { class: "sheet", role: "dialog", "aria-modal": "true" }, h("div", { class: "sheet-head" }, h("h3", {}, `${KIND_ICON[x.kind]} ${x.name}`), h("button", { class: "btn plain", onclick: closeOverlay }, t("cancel"))),
+      fill(ov, h("div", { class: "sheet", role: "dialog", "aria-modal": "true" }, h("div", { class: "sheet-head" }, h("h3", { class: "row", style: "gap:10px" }, sico(KIND_ICON[x.kind], 22), x.name), h("button", { class: "btn plain", onclick: closeOverlay }, t("cancel"))),
         h("p", { class: "meta" }, x.description), h("div", { class: "stack" }, field("Project name", inp(f.name, (v) => (f.name = v), { placeholder: x.name })),
           withAi ? field("Agent", sel(agentOpts(), f.agent, (v) => (f.agent = v))) : null,
           withAi ? field("What should it build?", h("textarea", { style: "min-height:90px;font-family:var(--font)", placeholder: "A landing page for a bakery in Lyon, warm colours, opening hours and a map link", oninput: (e) => (f.prompt = e.target.value) })) : null,
           h("div", { class: "meta" }, "Files: " + x.files.join(", ")), h("div", {}, b), e2)));
     };
-    return h("div", { class: "card tcard" }, h("div", { class: "thumb k-" + x.kind }, KIND_ICON[x.kind]), h("b", {}, x.name), h("div", { class: "meta" }, x.description), h("div", { class: "row" }, x.tags.map((t_) => chip(t_, "mute"))),
+    return h("div", { class: "card tcard" }, h("div", { class: "thumb k-" + x.kind }, sico(KIND_ICON[x.kind], 46)), h("b", {}, x.name), h("div", { class: "meta" }, x.description), h("div", { class: "row" }, x.tags.map((t_) => chip(t_, "mute"))),
       h("div", { class: "row gap" }, h("button", { class: "btn plain", onclick: () => make(false) }, "Use"), LAB.agents.length ? h("button", { class: "btn", onclick: () => make(true) }, "Build with AI") : null));
   }));
   Promise.all([lapi("/api/lab/templates").then((r) => (tp.list = r.templates)), loadLab(["agents"])]).then(() => current === "templates" && paint()).catch((e) => (err.textContent = e.message));
   return [...lhead("Templates", "Start a website, game, model or infrastructure project from a working template, then let an agent customise it. Deploy to localhost or Cloudflare in one click."),
-    h("div", { class: "row", style: "margin-bottom:16px" }, seg([["all", "All"], ["website", "🌐 Websites"], ["game", "🎮 Games"], ["model", "🧠 Models"], ["infra", "🏗️ Infrastructure"]], tp.kind, (v) => { tp.kind = v; renderPage(); }, true)), grid, err];
+    h("div", { class: "row", style: "margin-bottom:16px" }, seg([["all", "All"], ["website", "Websites"], ["game", "Games"], ["model", "Models"], ["infra", "Infrastructure"]], tp.kind, (v) => { tp.kind = v; renderPage(); }, true)), grid, err];
 }
 
 /* ---------- terminal ---------- */
@@ -1060,7 +1127,7 @@ function pageTerminal() {
     if (sending || !queue || !tm.id) return;
     sending = true;
     const data = queue; queue = "";
-    try { const r = await lapi(`/api/lab/terminals/${tm.id}/input`, { data }); warn.textContent = r.warning ? "⚠ " + r.warning : ""; } catch {}
+    try { const r = await lapi(`/api/lab/terminals/${tm.id}/input`, { data }); warn.textContent = r.warning ? "Warning: " + r.warning : ""; } catch {}
     sending = false; flush();
   };
   const sendKeys = (data) => { queue += data; flush(); };
@@ -1123,12 +1190,12 @@ function pageLibrary() {
     const [L_, C] = await Promise.all([lapi("/api/lab/library"), lapi("/api/lab/commands")]).catch(() => [null, null]);
     if (!L_) return;
     const err = errBox();
-    if (lb.tab === "roles") fill(body, h("div", { class: "cards3" }, L_.roles.map((r) => h("div", { class: "card" }, h("div", { class: "big" }, r.avatar), h("b", {}, r.name), h("div", { class: "meta" }, r.role), h("div", { class: "row gap" }, r.skills.map((s_) => chip(s_, "mute"))),
+    if (lb.tab === "roles") fill(body, h("div", { class: "cards3" }, L_.roles.map((r) => h("div", { class: "card" }, h("div", { class: "big" }, avatarIcon(r.avatar, 30)), h("b", {}, r.name), h("div", { class: "meta" }, r.role), h("div", { class: "row gap" }, r.skills.map((s_) => chip(s_, "mute"))),
       h("button", { class: "btn plain", onclick: () => { NAVSTATE.agents = "new"; go("agents"); } }, "Use for a new agent")))));
     else if (lb.tab === "skills") {
       const f = { name: "", instructions: "", description: "" };
       const add = h("button", { class: "btn", onclick: () => busy(add, async () => { await lapi("/api/lab/library/skills", f); paint(); }, err) }, "Create skill");
-      fill(body, h("div", { class: "cards3" }, [...L_.skills, ...L_.custom_skills].map((s_) => h("div", { class: "card" }, h("b", {}, s_.name, s_.id.startsWith("c-") ? " ✎" : ""), h("div", { class: "meta" }, s_.description),
+      fill(body, h("div", { class: "cards3" }, [...L_.skills, ...L_.custom_skills].map((s_) => h("div", { class: "card" }, h("b", {}, s_.name, s_.id.startsWith("c-") ? " (custom)" : ""), h("div", { class: "meta" }, s_.description),
         s_.id.startsWith("c-") ? h("button", { class: "btn danger", onclick: () => lapi(`/api/lab/library/skills/${s_.id}/delete`, {}).then(paint) }, t("remove")) : null))),
         h("div", { class: "card stack" }, h("h3", { class: "card-title" }, "New skill"), field("Name", inp(f.name, (v) => (f.name = v))), field("Description", inp(f.description, (v) => (f.description = v))),
           field("Instructions", h("textarea", { style: "min-height:90px;font-family:var(--font)", oninput: (e) => (f.instructions = e.target.value) })), h("div", {}, add), err));
