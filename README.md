@@ -9,17 +9,36 @@ Four small, zero-dependency tools for building trustworthy AI agents. Python 3.9
 | **Permission Sandbox Designer** (`sandbox`) | Write plain rules, get a least-privilege Claude Code `settings.json` block, and see which attack attempts would slip through. |
 | **Hallucination Tripwires** (`tripwires`) | Plant seed-derived canary facts in documents, then audit answers for recall, contradiction and invention. |
 
-## Quick start (Claude Code)
+## Quick start
 
 ```
 pip install -e .
-agentlab install claude-code --policy rules.txt   # hooks + sandbox rules in .claude/settings.json
-agentlab serve                                    # dashboard at http://127.0.0.1:8765
+agentlab connect                      # sets up every agent it finds (or name one: claude-code | kimi | openclaw)
+agentlab connect --policy rules.txt   # ...and enforce your sandbox rules
+agentlab serve                        # dashboard at http://127.0.0.1:8765
+agentlab status                       # what is connected
 ```
 
-Use Claude Code as normal. Every prompt, tool call and edit is recorded under `.agentlab/runs/`, and tool calls that break your rules are blocked (the hook exits with code 2 and tells Claude why). Secrets are redacted before anything is written.
+Use your agent as normal. Every prompt, tool call and edit is recorded under `.agentlab/runs/`, and tool calls that break your rules are blocked (the hook exits with code 2 and tells the agent why). Secrets are redacted before anything is written. `agentlab disconnect <agent>` removes what `connect` added.
 
-Add `--with-permissions` to also merge the generated `permissions` block into `settings.json`.
+agentlab only records in projects you have connected (those with a `.agentlab/` folder), even when an agent's hook is installed user-wide.
+
+## Supported agents
+
+| Agent | Recording and enforcement | MCP tools | What `connect` does |
+|---|---|---|---|
+| **Claude Code** | Hooks (`PreToolUse`, `PostToolUse`, ...) | `.mcp.json` | Merges hooks into `.claude/settings.json` |
+| **Kimi Code CLI** | Hooks, same events and exit-code-2 blocking ([docs](https://moonshotai.github.io/kimi-code/en/customization/hooks.html)) | `.kimi-code/mcp.json` ([docs](https://moonshotai.github.io/kimi-code/en/customization/mcp.html)) | Appends a marked `[[hooks]]` block to `~/.kimi-code/config.toml` (your file is never rewritten) |
+| **OpenClaw** | Plugin with a `before_tool_call` hook that can block ([docs](https://docs.openclaw.ai/plugins/hooks/tool-policy)) | `mcp.servers` in `~/.openclaw/openclaw.json` ([docs](https://docs.openclaw.ai/gateway/config-extensions)) | Generates a plugin in `.agentlab/openclaw-plugin/` and runs `openclaw plugins install` if the CLI is present; prints the optional MCP snippet |
+
+Any other MCP-capable agent can use `agentlab mcp --print-config` (advisory only, see below).
+
+What is verified and what is not:
+
+- Tool names and parameters differ per agent (`file_path` vs `path`, `FetchURL`, `exec` ...). `adapters.py` maps them to one shape, and a known file, shell or web tool whose path, command or URL can't be recognised is **blocked, not guessed**.
+- The Kimi and OpenClaw integrations follow their published docs and are covered by tests that feed their payload shapes to the hook and run the generated OpenClaw plugin in Node against a stub of its SDK. They have **not been run inside the real Kimi Code or OpenClaw apps**. Two details are assumed: Kimi's stdin field for the tool name (we accept `tool_name`, `toolName` or `tool`) and OpenClaw's `exec` parameter name (`command`).
+- OpenClaw's plugin SDK is documented as experimental and needs a recent OpenClaw (the plugin declares `openclaw >= 2026.5.17`).
+- If agentlab can't start, hooks fail open so your agent keeps working. The OpenClaw plugin spawns `agentlab hook` per tool call, which adds a short delay.
 
 ## Dashboard
 
@@ -41,7 +60,7 @@ Once any key exists, API calls need `Authorization: Bearer <key>` (the dashboard
 
 ```
 agentlab mcp --print-config          # mcpServers JSON to paste into your agent's MCP settings
-agentlab install claude-code --with-mcp   # or write .mcp.json for Claude Code
+agentlab connect claude-code                # also writes .mcp.json (add --no-mcp to skip)
 ```
 
 Tools: `check_policy` (ask before acting), `record_note` (log a step), `plant_canaries`, `audit_answer`. MCP is cooperative: the agent decides to call these, so it can record and advise but not enforce. Use the hook or the upcoming proxy for enforcement.
@@ -73,6 +92,7 @@ All routes are JSON, on localhost only. POST bodies must use `Content-Type: appl
 | `GET /api/runs`, `GET /api/runs/<id>` | list runs, read one |
 | `POST /api/runs/<id>/fork` `{step}` | fork from a step |
 | `POST /api/events` `{run, kind, content, tool?}` | ingest an event from any adapter |
+| `GET /api/agents` | which agents are detected and connected |
 | `GET/POST /api/policy` | read or save the project policy |
 | `GET/POST /api/pads`, `GET /api/pads/<id>`, `POST /api/pads/<id>/delete` | code pads |
 | `GET/POST /api/keys`, `POST /api/keys/<id>/revoke` | API keys |

@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
 
-from . import __version__, apigen, apikeys, pads, regress
+from . import __version__, apigen, apikeys, connect as connect_mod, pads, regress
 from .hooks import data_dir
 from .recorder import append_event, fork_run, load_run, summarize_run
 from .sandbox import ATTACKS, parse_policy, simulate
@@ -133,6 +133,9 @@ def make_server(project=".", port=8765):
         answer = str(body.get("answer", ""))
         return {"report": t.audit(answer), "healthy": t.verdict(answer, expect_all=bool(body.get("expect_all", False)))}
 
+    def agents(_):
+        return {"agents": connect_mod.status(project)}
+
     def list_pads(_):
         return {"pads": pads.list_pads(project)}
 
@@ -186,6 +189,7 @@ def make_server(project=".", port=8765):
         ("POST", "/api/regress"): compare,
         ("POST", "/api/tripwires/plant"): plant,
         ("POST", "/api/tripwires/audit"): audit,
+        ("GET", "/api/agents"): agents,
         ("GET", "/api/pads"): list_pads,
         ("POST", "/api/pads"): save_pad,
         ("GET", "/api/keys"): list_keys,

@@ -64,6 +64,7 @@ function setSetting(patch) {
   applySettings();
   renderChrome();
   if (!$("overlay").hidden && $("overlay").dataset.kind === "settings") renderSettings();
+  if (!$("overlay").hidden && $("overlay").dataset.kind === "connect") renderConnect();
   renderPage();
 }
 dark.addEventListener("change", applySettings);
@@ -98,6 +99,29 @@ const ago = (ts) => {
   const s = Math.max(0, Date.now() / 1000 - ts);
   return s < 60 ? t("just_now") : s < 3600 ? t("m_ago", { n: Math.floor(s / 60) }) : s < 86400 ? t("h_ago", { n: Math.floor(s / 3600) }) : t("d_ago", { n: Math.floor(s / 86400) });
 };
+const SOURCES = { kimi_code_cli: "Kimi", openclaw: "OpenClaw" };
+const ag = { list: [] };
+async function loadAgents() {
+  try { ag.list = (await api("/api/agents")).agents; } catch { return; }
+  if ($("agentStrip")) paintAgents();
+}
+function paintAgents() {
+  $("agentStrip").replaceChildren(...ag.list.map((a) => h("button", { class: "chip " + (a.connected ? "ok" : "mute"), onclick: renderConnect }, (a.connected ? "● " : "○ ") + a.name)),
+    h("button", { class: "btn plain", style: "padding:2px 8px;font-size:.85rem", onclick: renderConnect }, t("connect")));
+}
+function renderConnect() {
+  const ov = $("overlay");
+  ov.hidden = false; ov.className = ""; ov.dataset.kind = "connect";
+  const copyRow = (a) => { const b = h("button", { class: "btn plain", onclick: () => copyText(a.command, b) }, t("copy")); return h("div", { class: "row", style: "flex-basis:100%;flex-wrap:nowrap" }, h("code", { class: "grow mono" }, a.command), b); };
+  ov.replaceChildren(h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": t("connect") },
+    h("div", { class: "sheet-head" }, h("h3", {}, t("connect")), h("button", { class: "btn plain", onclick: closeOverlay }, t("done"))),
+    h("p", { class: "meta", style: "margin:0 0 4px" }, t("connect_hint")),
+    h("h2", {}, t("run_in_terminal")),
+    h("div", { class: "group" }, ag.list.map((a) => h("div", { class: "setrow", style: "flex-wrap:wrap" }, h("span", {}, a.name),
+      chip(a.connected ? t("a_connected") : a.detected ? t("a_detected") : t("a_missing"), a.connected ? "ok" : a.detected ? "" : "mute"),
+      a.connected ? null : copyRow(a)))),
+    h("div", { class: "row gap", style: "justify-content:center" }, h("code", { class: "mono" }, "agentlab connect"))));
+}
 const kindTone = { decision: "bad", error: "bad", output: "ok", file_edit: "warn", prompt: "", tool_call: "mute", tool_result: "mute" };
 
 async function loadRuns() {
@@ -110,10 +134,10 @@ async function loadRuns() {
 function paintRunList() {
   const box = $("runList");
   if (!box) return;
-  if (!act.runs.length) { box.replaceChildren(h("div", { class: "empty" }, h("b", {}, t("no_runs")), t("no_runs_hint"), h("div", { class: "gap" }, h("code", {}, "agentlab install claude-code")))); return; }
+  if (!act.runs.length) { box.replaceChildren(h("div", { class: "empty" }, h("b", {}, t("no_runs")), t("no_runs_hint"), h("button", { class: "btn gap", onclick: renderConnect }, t("connect")))); return; }
   box.replaceChildren(...act.runs.map((r) => h("button", { "aria-current": r.id === act.selected, onclick: () => openRun(r.id) },
     h("div", { class: "t" }, r.title || r.id),
-    h("div", { class: "meta" }, `${t("steps", { n: r.events })} · ${ago(r.last)}`, r.blocked ? chip(t("blocked_n", { n: r.blocked }), "bad") : null, r.errors ? chip(t("errors_n", { n: r.errors }), "bad") : null, r.forked_from ? chip(t("fork_tag"), "mute") : null))));
+    h("div", { class: "meta" }, `${t("steps", { n: r.events })} · ${ago(r.last)}`, r.blocked ? chip(t("blocked_n", { n: r.blocked }), "bad") : null, r.errors ? chip(t("errors_n", { n: r.errors }), "bad") : null, r.forked_from ? chip(t("fork_tag"), "mute") : null, SOURCES[r.source] ? chip(SOURCES[r.source], "mute") : null))));
 }
 async function openRun(id, keep = false) {
   act.selected = id;
@@ -440,8 +464,10 @@ function renderWelcome(choice) {
   };
   draw(choice);
 }
-addEventListener("keydown", (e) => { if (e.key === "Escape" && $("overlay").dataset.kind === "settings") closeOverlay(); });
-$("overlay").addEventListener("click", (e) => { if (e.target === $("overlay") && $("overlay").dataset.kind === "settings") closeOverlay(); });
+const dismissible = () => ["settings", "connect"].includes($("overlay").dataset.kind);
+addEventListener("keydown", (e) => { if (e.key === "Escape" && dismissible()) closeOverlay(); });
+$("overlay").addEventListener("click", (e) => { if (e.target === $("overlay") && dismissible()) closeOverlay(); });
+addEventListener("focus", () => { if (current === "activity") loadAgents(); });
 $("openSettings").addEventListener("click", renderSettings);
 
 /* ---------- pages table + boot ---------- */
@@ -450,7 +476,8 @@ const pages = {
     poll = setInterval(loadRuns, 3000);
     loadRuns().then(() => { if (act.selected) openRun(act.selected, true); });
     queueMicrotask(() => { paintRunList(); paintRun(); });
-    return [...head("act_title", "act_sub"), h("div", { class: "split" }, h("div", { class: "list card", id: "runList" }), h("div", { class: "card", id: "runView" }, h("div", { class: "empty" }, t("select_run"))))];
+    loadAgents();
+    return [...head("act_title", "act_sub"), h("div", { id: "agentStrip" }), h("div", { class: "split" }, h("div", { class: "list card", id: "runList" }), h("div", { class: "card", id: "runView" }, h("div", { class: "empty" }, t("select_run"))))];
   },
   sandbox: pageSandbox, regress: pageRegress, tripwires: pageTripwires, pad: pagePad, api: pageApi,
 };

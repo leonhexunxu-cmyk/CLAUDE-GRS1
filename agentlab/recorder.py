@@ -138,5 +138,6 @@ def summarize_run(path):
         "blocked": blocked,
         "errors": sum(1 for e in events if e["kind"] == "error"),
         "forked_from": meta.get("forked_from"),
+        "source": meta.get("source"),
         "title": next((str(e["content"])[:80] for e in events if e["kind"] == "prompt"), ""),
     }

@@ -31,6 +31,7 @@ SPEC = [
        [("seed", "string", True), ("document", "string", True), ("n", "integer", False)]),
     _e("audit_answer", "POST", "/api/tripwires/audit", "Audit an answer against the canaries",
        [("seed", "string", True), ("answer", "string", True), ("n", "integer", False), ("expect_all", "boolean", False)]),
+    _e("list_agents", "GET", "/api/agents", "Which agents are detected and connected"),
     _e("list_pads", "GET", "/api/pads", "List code pads"),
     _e("get_pad", "GET", "/api/pads/{pad_id}", "Read a code pad"),
     _e("save_pad", "POST", "/api/pads", "Create or update a code pad",

@@ -134,7 +134,13 @@
   "g_personalise": "Personalise",
   "g_code": "Code",
   "offline": "Offline",
-  "connected": "Connected"
+  "connected": "Connected",
+  "connect": "Connect agents",
+  "connect_hint": "agentlab sets up hooks and MCP for you. Run one command in your project.",
+  "a_connected": "Connected",
+  "a_detected": "Ready to connect",
+  "a_missing": "Not found",
+  "run_in_terminal": "Run in your project’s terminal"
  },
  "es": {
   "_name": "Español",
@@ -271,7 +277,13 @@
   "g_personalise": "Personalizar",
   "g_code": "Código",
   "offline": "Sin conexión",
-  "connected": "Conectado"
+  "connected": "Conectado",
+  "connect": "Conectar agentes",
+  "connect_hint": "agentlab configura hooks y MCP por ti. Ejecuta un comando en tu proyecto.",
+  "a_connected": "Conectado",
+  "a_detected": "Listo para conectar",
+  "a_missing": "No encontrado",
+  "run_in_terminal": "Ejecuta en la terminal de tu proyecto"
  },
  "fr": {
   "_name": "Français",
@@ -408,7 +420,13 @@
   "g_personalise": "Personnaliser",
   "g_code": "Code",
   "offline": "Hors ligne",
-  "connected": "Connecté"
+  "connected": "Connecté",
+  "connect": "Connecter des agents",
+  "connect_hint": "agentlab configure les hooks et MCP pour vous. Lancez une commande dans votre projet.",
+  "a_connected": "Connecté",
+  "a_detected": "Prêt à connecter",
+  "a_missing": "Introuvable",
+  "run_in_terminal": "À exécuter dans le terminal de votre projet"
  },
  "de": {
   "_name": "Deutsch",
@@ -545,7 +563,13 @@
   "g_personalise": "Anpassen",
   "g_code": "Code",
   "offline": "Offline",
-  "connected": "Verbunden"
+  "connected": "Verbunden",
+  "connect": "Agenten verbinden",
+  "connect_hint": "agentlab richtet Hooks und MCP für dich ein. Führe einen Befehl in deinem Projekt aus.",
+  "a_connected": "Verbunden",
+  "a_detected": "Bereit zum Verbinden",
+  "a_missing": "Nicht gefunden",
+  "run_in_terminal": "Im Terminal deines Projekts ausführen"
  },
  "zh": {
   "_name": "简体中文",
@@ -682,7 +706,13 @@
   "g_personalise": "个性化",
   "g_code": "代码",
   "offline": "离线",
-  "connected": "已连接"
+  "connected": "已连接",
+  "connect": "连接智能体",
+  "connect_hint": "agentlab 会为你配置钩子和 MCP。在项目中运行一条命令即可。",
+  "a_connected": "已连接",
+  "a_detected": "可连接",
+  "a_missing": "未找到",
+  "run_in_terminal": "在项目终端中运行"
  },
  "ja": {
   "_name": "日本語",
@@ -819,6 +849,12 @@
   "g_personalise": "パーソナライズ",
   "g_code": "コード",
   "offline": "オフライン",
-  "connected": "接続済み"
+  "connected": "接続済み",
+  "connect": "エージェントを接続",
+  "connect_hint": "agentlab がフックと MCP を設定します。プロジェクトで 1 つのコマンドを実行してください。",
+  "a_connected": "接続済み",
+  "a_detected": "接続可能",
+  "a_missing": "見つかりません",
+  "run_in_terminal": "プロジェクトのターミナルで実行"
  }
 }

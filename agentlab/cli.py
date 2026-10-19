@@ -18,6 +18,17 @@ def main(argv=None):
     p.add_argument("--project", default="."); p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-open", action="store_true")
 
+    p = sub.add_parser("connect", help="connect agents (claude-code, kimi, openclaw) to this project; no name = every detected agent")
+    p.add_argument("agents", nargs="*", choices=["claude-code", "kimi", "openclaw", []], default=[], metavar="agent")
+    p.add_argument("--project", default="."); p.add_argument("--policy", help="rules file to enforce")
+    p.add_argument("--no-mcp", action="store_true", help="hooks only, skip the MCP server entry")
+
+    p = sub.add_parser("disconnect", help="remove what `connect` added")
+    p.add_argument("agents", nargs="+", choices=["claude-code", "kimi", "openclaw"], metavar="agent"); p.add_argument("--project", default=".")
+
+    p = sub.add_parser("status", help="show which agents are detected and connected")
+    p.add_argument("--project", default=".")
+
     p = sub.add_parser("install", help="install hooks into an agent (currently: claude-code)")
     p.add_argument("agent", choices=["claude-code"]); p.add_argument("--project", default=".")
     p.add_argument("--policy", help="rules file to enforce"); p.add_argument("--command")
@@ -68,6 +79,24 @@ def main(argv=None):
             srv.serve_forever()
         except KeyboardInterrupt:
             pass
+    elif a.cmd in ("connect", "disconnect", "status"):
+        from . import connect as conn
+        if a.cmd == "status":
+            for r in conn.status(a.project):
+                state = "connected" if r["connected"] else ("detected, not connected" if r["detected"] else "not found")
+                print(f"{r['name']:<12} {state}" + ("" if r["connected"] else f"   ->  {r['command']}"))
+        elif a.cmd == "disconnect":
+            for agent in a.agents:
+                print(f"[{agent}]", *(conn.disconnect(agent, a.project) or ["nothing to remove"]), sep="\n  ")
+        else:
+            text = Path(a.policy).read_text(encoding="utf-8") if a.policy else None
+            targets = a.agents or [r["id"] for r in conn.status(a.project) if r["detected"]]
+            if not targets:
+                print("No agents detected. Name one: agentlab connect claude-code | kimi | openclaw")
+                return 1
+            for agent in targets:
+                print(f"[{agent}]", *conn.connect(agent, a.project, not a.no_mcp, policy_text=text), sep="\n  ")
+            print("\nDone. Run `agentlab serve` to watch activity.")
     elif a.cmd == "install":
         from .install import install_claude_code
         text = Path(a.policy).read_text(encoding="utf-8") if a.policy else None

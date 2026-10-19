@@ -139,3 +139,7 @@ html[data-theme=dark] .group { background: #2c2c2e; }
 .langs button[aria-pressed=true] { box-shadow: 0 0 0 2.5px var(--accent); }
 .welcome .btn { padding: 11px 40px; font-size: 1.05rem; }
 .reveal { animation: rise .5s var(--ease) both; }
+
+button.chip { border: 0; cursor: pointer; font-family: inherit; transition: opacity .2s; } button.chip:hover { opacity: .8; }
+#agentStrip { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: -14px 0 24px; }
+.setrow > .chip { flex: none; }

@@ -13,7 +13,8 @@ Goal: make agentlab something people can plug into the coding agents they alread
 | **M4** Web dashboard: runs timeline with replay and fork, sandbox editor with live attack simulation, regression diff, tripwire audit | Done |
 | **M4b** API generator (Python/JS/TS/curl + OpenAPI), optional API keys, code pad with isolated JS runner, first-run language choice, settings/personalisation, Apple-style UI refresh | Done |
 | **M5** MCP server (`agentlab mcp`) exposing `check_policy`, `record_note`, `plant_canaries`, `audit_answer` to any MCP-capable agent | Done |
-| **M6a** Verify OpenClaw and Kimi Code hook, plugin and base-URL support before building their adapters | Next |
+| **M6a** Verify OpenClaw and Kimi Code support from official docs; `agentlab connect/disconnect/status`, Kimi hooks, OpenClaw plugin, shared tool-name normalisation, per-project opt-in | Done |
+| **M6b** Run the Kimi and OpenClaw integrations inside the real apps and confirm the assumed fields | Next (needs the apps) |
 | **M6** Model API proxy (OpenAI-style and Anthropic-style) that records and audits any agent with a configurable base URL | Planned |
 | **M7** Transcript importers for agents that write session logs to disk | Planned |
 | **M8** Python and TypeScript SDK wrappers for the Claude Agent SDK and LangChain; publish to PyPI and npm | Planned |
@@ -39,7 +40,9 @@ Goal: make agentlab something people can plug into the coding agents they alread
 | `sandbox.py` | rule parsing, policy checks, tool-call mapping, attack simulation |
 | `regress.py` | baseline comparison |
 | `tripwires.py` | canary generation and answer audit |
-| `hooks.py`, `install.py` | Claude Code adapter |
+| `adapters.py` | normalise tool names and parameters across agents |
+| `hooks.py`, `install.py` | the hook all agents call; Claude Code settings merge |
+| `connect.py`, `assets/openclaw_plugin.js` | connect, disconnect and status for Claude Code, Kimi Code, OpenClaw |
 | `mcp.py` | MCP stdio server for any MCP-capable agent |
 | `server.py`, `ui/` | backend and dashboard (`index.html`, `app.js`, `style.css`, `i18n.json`, `runner.html`) |
 | `apigen.py` | single description of the API; OpenAPI and client generators |
@@ -52,7 +55,7 @@ Goal: make agentlab something people can plug into the coding agents they alread
 - Redaction is pattern-based and will miss unusual secret formats.
 - Tripwire audits are string heuristics, a cheap signal and not proof.
 - MCP is cooperative: the agent chooses to call `check_policy` and `record_note`, so it records and advises but cannot enforce. Enforcement needs the hook (Claude Code) or the proxy (M6).
-- Only Claude Code has an enforcing adapter today. Other agents need M6 or M7; their hook and plugin support should be verified before promising integration.
+- Claude Code, Kimi Code and OpenClaw have enforcing adapters (Kimi and OpenClaw not yet run in the real apps, see M6b). Other agents need the proxy (M6) or importers (M7); their hook and plugin support should be verified before promising integration.
 
 - Translations were written without a native-speaker review, and plurals are simple ("1 bloqueadas"). Have speakers check them before release.
 - The pad's JS runner is isolated (sandboxed frame, worker, no network, killed after 5 s) but is not a security boundary for hostile code against browser bugs.
