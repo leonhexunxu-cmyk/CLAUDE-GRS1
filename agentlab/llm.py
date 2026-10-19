@@ -60,6 +60,34 @@ def validate_provider(p):
     return out
 
 
+def extract_json(text):
+    """First JSON object found in a model's reply (models often wrap it in prose or code fences), or None."""
+    text = str(text or "")
+    start = text.find("{")
+    while start != -1:
+        depth, in_str, esc = 0, False, False
+        for i in range(start, len(text)):
+            c = text[i]
+            if in_str:
+                esc = (c == "\\" and not esc)
+                if c == '"' and not esc:
+                    in_str = False
+            elif c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        obj = json.loads(text[start:i + 1])
+                        return obj if isinstance(obj, dict) else None
+                    except ValueError:
+                        break
+        start = text.find("{", start + 1)
+    return None
+
+
 def cost(provider, usage):
     return round((usage["input"] * provider.get("price_in", 0) + usage["output"] * provider.get("price_out", 0)) / 1e6, 6)
 

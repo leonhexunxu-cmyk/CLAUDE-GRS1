@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from . import agents, envs, llm, memory, projects, usage
+from . import agents, envs, llm, memory, project_env, projects, usage
 from .hooks import data_dir
 from .recorder import append_event, load_run
 
@@ -92,10 +92,11 @@ def safe_fetch(url, max_bytes=100_000, hops=3, timeout=15):
 
 
 class Runtime:
-    def __init__(self, root, on_event=None, max_concurrent=4, approval_timeout=600, after_job=None):
+    def __init__(self, root, on_event=None, max_concurrent=4, approval_timeout=600, after_job=None, after_feedback=None):
         self.root = Path(root).resolve()
         self.on_event = on_event          # (event_name, text, data) for webhooks
         self.after_job = after_job        # (job, agent) hook: diary, evolution
+        self.after_feedback = after_feedback  # (job) hook: lessons from your feedback
         self.approval_timeout = approval_timeout
         self._lock = threading.RLock()
         self._cancel, self._wait, self._always = {}, {}, {}
@@ -143,7 +144,7 @@ class Runtime:
             raise JobError("a prompt is required (max 20,000 characters)")
         project = projects.get(self.root, project_id)
         agent = agents.get(self.root, agent_id)
-        job = {"id": uuid.uuid4().hex[:10], "project": project_id, "project_name": project["name"], "agent": agent_id, "agent_name": agent["name"],
+        job = {"id": uuid.uuid4().hex[:10], "project": project_id, "project_name": project["name"], "agent": agent_id, "agent_name": agent["name"], "agent_version": agent["version"], "feedback": None,
                "prompt": prompt, "status": "queued", "created": time.time(), "started": None, "ended": None, "autonomous": bool(autonomous),
                "overrides": {k: v for k, v in (overrides or {}).items() if k in agents.CATEGORIES and v in ("allow", "ask", "deny")}, "schedule": schedule,
                "progress": {"percent": 0, "note": "", "step": 0, "max_steps": agent["limits"]["max_steps"]},
@@ -163,6 +164,22 @@ class Runtime:
         w = self._wait.get(job_id)
         if w:
             w["event"].set()
+        return job
+
+    def feedback(self, job_id, rating, note=""):
+        """Record your verdict on a finished job (+1 / -1 and an optional note); the agent learns from it."""
+        if rating not in (1, -1):
+            raise JobError("rating must be 1 or -1")
+        job = self.get(job_id)
+        if job["status"] not in FINAL:
+            raise JobError("the job is still running")
+        job["feedback"] = {"rating": rating, "note": str(note)[:500], "ts": time.time()}
+        self._save(job)
+        if self.after_feedback:
+            try:
+                self.after_feedback(job)
+            except Exception:
+                pass
         return job
 
     def decide(self, job_id, approval_id, allow, always=False):
@@ -367,7 +384,11 @@ class Runtime:
             return f"deleted {a['path']}", None
         if name == "run_command":
             u = projects.usage(root, pid)
-            res = envs.run_command(projects.workspace(root, pid), str(a["command"]), network=bool(a.get("network")), timeout=min(int(a.get("timeout") or lim["step_timeout"]), lim["step_timeout"]),
+            cfg = project_env.get(root, pid)
+            if a.get("network") and cfg["network"] == "off":
+                raise PermissionError("this project's environment is offline (network: off)")
+            res = envs.run_command(projects.workspace(root, pid), str(a["command"]), network=bool(a.get("network")), env=project_env.command_env(root, pid),
+                                   timeout=min(int(a.get("timeout") or cfg["timeout"]), lim["step_timeout"], cfg["timeout"] if cfg["timeout"] != 60 else lim["step_timeout"]),
                                    free_bytes=u["free_bytes"], home=projects.home(root, pid), cancel=cancel)
             note = "\n[killed: timed out]" if res["timed_out"] else ("\n[output truncated]" if res["truncated"] else "")
             over = "\n[warning: the project is over its space quota; delete files]" if projects.usage(root, pid)["free_bytes"] == 0 else ""
