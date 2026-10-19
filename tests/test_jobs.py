@@ -241,7 +241,7 @@ class AuthorizationTests(JobCase):
 
     def test_job_level_overrides_and_mode_defaults(self):
         aid = self.agent(mode="ask_risky")
-        self.assertEqual([agents.effective(agents.get(self.root, aid), c) for c in agents.CATEGORIES], ["allow", "allow", "ask", "ask"])
+        self.assertEqual([agents.effective(agents.get(self.root, aid), c) for c in agents.CATEGORIES], ["allow", "allow", "ask", "ask", "ask"])
         script = Script([R(calls=[("run_command", {"command": "echo hi"})]), R("ok")])
         job = self.run_job(script, aid, overrides={"run": "allow"})  # unattended run, pre-authorised
         self.assertEqual(job["metrics"]["approvals_asked"], 0)

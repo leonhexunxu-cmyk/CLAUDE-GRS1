@@ -145,7 +145,7 @@ def apply_role(spec, role_id):
 def catalog():
     return {"roles": [{"id": k, **{x: v[x] for x in ("name", "avatar", "role", "skills", "plugins", "mode")}} for k, v in ROLES.items()],
             "skills": [{"id": k, "name": v[0], "description": v[1], "builtin": True} for k, v in SKILLS.items()] + custom_skills_list(),
-            "plugins": [{"id": k, "name": v["name"], "description": v["description"], "category": v["category"], "tool": v["tool"], "builtin": True} for k, v in PLUGINS.items()] + [
+            "plugins": [{"id": k, "name": v["name"], "description": v["description"], "category": v["category"], "tool": v["tool"], "builtin": True} for k, v in {**PLUGINS, **{k: {**v, "tool": v["tool"]} for k, v in SPECIAL_PLUGINS.items()}}.items()] + [
                 {"id": p["id"], "name": p["name"], "description": p["description"], "category": p["category"], "tool": p["tool"], "builtin": False} for p in custom_plugins_list()]}
 
 
@@ -246,10 +246,19 @@ def get_plugin(root, pid):
     raise LibraryError(f"plugin not found: {pid}", 404)
 
 
+SPECIAL_PLUGINS = {"widgets": {"name": "Widgets", "description": "Create interactive widgets (charts, tables, forms, calculators ...) and save them to the widget library.", "category": "write", "tool": "create_widget",
+                               "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "spec": {"type": "string", "description": "JSON for a declarative widget, or a full HTML page for type html"},
+                                                                               "type": {"type": "string", "description": "chart, table, stats, buttons, form, progress, checklist, markdown, code or html"}}, "required": ["type", "spec"]}}}
+
+
 def plugin_tool_specs(root, plugin_ids):
     """Tool schemas for the plugins an agent has enabled."""
     out = []
     for pid in plugin_ids:
+        if pid in SPECIAL_PLUGINS:
+            sp = SPECIAL_PLUGINS[pid]
+            out.append({"name": sp["tool"], "description": sp["description"], "parameters": sp["parameters"], "_plugin": pid, "_category": sp["category"], "_special": pid})
+            continue
         try:
             p = get_plugin(root, pid)
         except LibraryError:

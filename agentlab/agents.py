@@ -9,12 +9,12 @@ import uuid
 from . import llm
 from .hooks import data_dir
 
-CATEGORIES = ("read", "write", "run", "network")
+CATEGORIES = ("read", "write", "run", "network", "environment")
 # Control modes: what happens when the agent wants to use a tool of each category.
 MODES = {
-    "ask": {"label": "Ask before every action", "read": "ask", "write": "ask", "run": "ask", "network": "ask"},
-    "ask_risky": {"label": "Ask only for risky actions", "read": "allow", "write": "allow", "run": "ask", "network": "ask"},
-    "auto": {"label": "Full auto", "read": "allow", "write": "allow", "run": "allow", "network": "allow"},
+    "ask": {"label": "Ask before every action", "read": "ask", "write": "ask", "run": "ask", "network": "ask", "environment": "ask"},
+    "ask_risky": {"label": "Ask only for risky actions", "read": "allow", "write": "allow", "run": "ask", "network": "ask", "environment": "ask"},
+    "auto": {"label": "Full auto", "read": "allow", "write": "allow", "run": "allow", "network": "allow", "environment": "allow"},
 }
 DECISIONS = ("inherit", "allow", "ask", "deny")
 STYLES = ("concise", "balanced", "detailed")
@@ -112,7 +112,7 @@ def validate(spec, existing=None):
         raise AgentError(str(e))
     return {"name": name, "role": str(get("role", ""))[:200], "avatar": str(get("avatar", "🤖"))[:8] or "🤖", "provider": provider,
             "instructions": instructions, "preferences": prefs, "mode": mode, "authorizations": auth, "limits": limits,
-            "skills": [str(x) for x in get("skills", [])][:20], "plugins": [str(x) for x in get("plugins", [])][:20], "dream": {k: dream[k] for k in ("enabled", "start", "end", "tz_minutes", "token_budget", "cycles")}, "native_tools": bool(get("native_tools", True)), "protection": {"dangerous_commands": protection["dangerous_commands"]}, "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
+            "skills": [str(x) for x in get("skills", [])][:20], "plugins": [str(x) for x in get("plugins", [])][:20], "dream": {k: dream[k] for k in ("enabled", "start", "end", "tz_minutes", "token_budget", "cycles")}, "environment_control": bool(get("environment_control", False)), "native_tools": bool(get("native_tools", True)), "protection": {"dangerous_commands": protection["dangerous_commands"]}, "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
             "source": get("source", {"kind": "manual"})}
 
 

@@ -16,11 +16,12 @@ import uuid
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from . import agents, danger, envs, library, llm, memory, project_env, projects, tokenizers, usage
+from . import agents, danger, envs, library, llm, memory, project_env, projects, tokenizers, usage, widgets
 from .hooks import data_dir
 from .recorder import append_event, load_run
 
-CATEGORY = {"list_files": "read", "read_file": "read", "write_file": "write", "delete_file": "write", "run_command": "run", "web_fetch": "network"}
+CATEGORY = {"list_files": "read", "read_file": "read", "write_file": "write", "delete_file": "write", "run_command": "run", "web_fetch": "network",
+            "environment_info": "read", "environment_set_var": "environment", "environment_remove_var": "environment", "environment_install": "environment", "environment_network": "environment"}
 STATUSES = ("queued", "running", "waiting_approval", "succeeded", "failed", "cancelled", "stopped")
 FINAL = ("succeeded", "failed", "cancelled", "stopped")
 MAX_RESULT = 8000
@@ -48,6 +49,12 @@ def tool_specs(agent):
         {"name": "update_progress", "description": "Report how far along you are (0-100) with a short note.", "parameters": obj({"percent": {"type": "integer"}, "note": s}, ["percent"])},
         {"name": "finish", "description": "Call when the goal is done, with a short summary of the result.", "parameters": obj({"summary": s}, ["summary"])},
     ]
+    if agent.get("environment_control"):
+        specs += [{"name": "environment_info", "description": "Show this project's environment: variables, Python packages, network policy.", "parameters": obj({})},
+                  {"name": "environment_set_var", "description": "Set a NON-SECRET environment variable for commands in this project (never put keys or passwords here).", "parameters": obj({"name": s, "value": s}, ["name", "value"])},
+                  {"name": "environment_remove_var", "description": "Remove an environment variable from this project.", "parameters": obj({"name": s}, ["name"])},
+                  {"name": "environment_install", "description": "Install Python packages into this project's virtual environment (needs network).", "parameters": obj({"packages": {"type": "array", "items": {"type": "string"}}}, ["packages"])},
+                  {"name": "environment_network", "description": "Set the project's network policy: 'off' (offline) or 'allowed'. Turning it on always needs the user's approval.", "parameters": obj({"mode": s}, ["mode"])}]
     if agent.get("memory_enabled"):
         specs += [{"name": "remember", "description": "Save a short fact you want to remember in future work.", "parameters": obj({"fact": s}, ["fact"])},
                   {"name": "recall", "description": "Search what you remember.", "parameters": obj({"query": s}, ["query"])}]
@@ -315,6 +322,8 @@ class Runtime:
                 cats = [pl["_category"]]
         if call["name"] == "run_command" and call["arguments"].get("network"):
             cats.append("network")
+        if call["name"] == "environment_install":
+            cats.append("network")  # pip talks to the internet
         return cats
 
     def _authorize(self, job, agent, call, cancel):
@@ -332,6 +341,9 @@ class Runtime:
                 verdict, forced = "ask", True
             elif level == "warn":
                 self._event(job, "decision", f"WARNING run_command: {why}", tool="run_command")
+        if call["name"] == "environment_network" and str(call["arguments"].get("mode")) == "allowed":
+            verdict, forced = "ask", True  # giving a project internet access is an escalation: always the user's call
+            risk = [{"level": "confirm", "reason": "turns network access on for every command in this project"}]
         for c in cats:
             if c in self._always.get(job["id"], ()) and not forced:
                 continue
@@ -392,12 +404,24 @@ class Runtime:
         root, pid = self.root, job["project"]
         lim = agent["limits"]
         pl = self._plugin(agent, name)
+        if pl and pl.get("_special") == "widgets":
+            kind = str(a.get("type", "html"))
+            raw = a["spec"]
+            try:
+                spec = {"type": "html", "html": str(raw), "title": str(a.get("title", ""))} if kind == "html" else {**json.loads(raw if isinstance(raw, str) else json.dumps(raw)), "type": kind, "title": str(a.get("title", ""))}
+                rec = widgets.save(root, spec, agent=agent["id"], source="agent")
+            except (ValueError, widgets.WidgetError) as e:
+                raise ValueError(f"widget not created: {e}")
+            self._event(job, "file_edit", f"widget:{rec['id']} {rec['title']}", tool=name)
+            return f"widget created: id {rec['id']} ('{rec['title']}'). It is in the widget library.", None
         if pl:
             plugin = library.get_plugin(root, pl["_plugin"])
             try:
                 return library.run_plugin(root, pid, plugin, a, cancel=cancel, timeout=lim["step_timeout"]), None
             except library.LibraryError as e:
                 raise ValueError(str(e))
+        if name.startswith("environment_"):
+            return self._environment(job, agent, name, a), None
         if name == "list_files":
             path = str(a.get("path", ".") or ".")
             if path in (".", "./", ""):
@@ -439,6 +463,41 @@ class Runtime:
             return "remembered", None
         if name == "recall":
             return memory.as_prompt(root, agent["id"], a["query"], 8) or "(nothing relevant)", None
+        raise ValueError(f"unknown tool: {name}")
+
+
+    def _environment(self, job, agent, name, a):
+        root, pid = self.root, job["project"]
+        cfg = project_env.get(root, pid)
+        if name == "environment_info":
+            return json.dumps({"python": cfg["python"], "variables": cfg["vars"], "network": cfg["network"], "timeout": cfg["timeout"], "shared_keys": cfg["secrets"],
+                               "venv_ready": (project_env.venv_dir(root, pid) / "bin" / "python").exists()}, indent=2)
+        try:
+            if name == "environment_set_var":
+                from .schema import redact
+                if redact(str(a["value"])) != str(a["value"]):
+                    raise ValueError("that value looks like a secret; ask the user to add it as a key instead")
+                project_env.save(root, pid, {"vars": {**cfg["vars"], str(a["name"]): str(a["value"])}})
+                return f"set {a['name']}"
+            if name == "environment_remove_var":
+                project_env.save(root, pid, {"vars": {k: v for k, v in cfg["vars"].items() if k != str(a["name"])}})
+                return f"removed {a['name']}"
+            if name == "environment_network":
+                if str(a["mode"]) not in ("off", "allowed"):
+                    raise ValueError("mode must be off or allowed")
+                project_env.save(root, pid, {"network": str(a["mode"])})
+                return f"network is now {a['mode']}"
+            if name == "environment_install":
+                pkgs = a.get("packages")
+                if not isinstance(pkgs, list) or not pkgs:
+                    raise ValueError("packages must be a non-empty list")
+                if cfg["network"] == "off":
+                    raise ValueError("this project's environment is offline; turn the network policy to 'allowed' first (this needs the user's approval)")
+                project_env.save(root, pid, {"python": {"enabled": True, "packages": sorted(set(cfg["python"]["packages"]) | {str(p) for p in pkgs})}})
+                rec = project_env.setup_python(root, pid, wait=True)
+                return f"{rec['status']}\n{rec['log'][-1500:]}"
+        except project_env.EnvError as e:
+            raise ValueError(str(e))
         raise ValueError(f"unknown tool: {name}")
 
 
