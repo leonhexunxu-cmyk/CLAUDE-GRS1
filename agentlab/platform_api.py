@@ -8,7 +8,7 @@ import re
 import threading
 import time
 
-from . import (accounts, agent_stats, agentise, agents, analyze, batches, builders, commands, deploy, diary, docbuilder, dream, evals, evolution,
+from . import (accounts, agent_stats, agentise, agents, analyze, batches, builders, commands, comparator, deploy, diary, docbuilder, dream, evals, evolution,
                hardware, importers, jobs, knowledge, library, llm, memory, model_tests, models, notifications, notify, packager, playground, privacy,
                project_env, projects, rooms, runners, scheduler, suggestions, terminal, tokenizers, training, uploads, usage, vault, widgets)
 from . import embeddings
@@ -94,6 +94,18 @@ class Platform:
                 if isinstance(t, dict) and t.get("agent_id"):
                     need(ctx, t["agent_id"])
             return playground.compare(root, b)
+
+        def compare_run(ctx, b):
+            for t in b.get("targets") or []:
+                if isinstance(t, dict) and t.get("agent_id"):
+                    need(ctx, t["agent_id"])
+            return comparator.run(root, b)
+
+        def compare_judge(ctx, b, cid):
+            p = b.get("provider") or {}
+            if p.get("preset"):
+                p = {**llm.PRESETS.get(p["preset"], {}), **{k: v for k, v in p.items() if k != "preset"}}
+            return comparator.judge(root, comparator.get(root, cid), p)
 
         def room_create(ctx, b):
             for a in b.get("agents") or []:
@@ -292,6 +304,12 @@ class Platform:
             ("POST", "/api/lab/rooms/{room_id}/delete", "lab_delete_room", "Delete a room", [], lambda c, b, r: (rooms.delete(root, r), {"deleted": True})[1]),
             ("POST", "/api/lab/playground/chat", "lab_playground_chat", "Chat with a model or agent (attachments, widgets, insights)", [("messages", A, True), ("agent_id", S, False), ("provider", O, False), ("attachments", A, False), ("widgets", B, False)], playground_chat),
             ("POST", "/api/lab/playground/compare", "lab_playground_compare", "Same prompt on several models side by side", [("messages", A, True), ("targets", A, True)], playground_compare),
+            ("GET", "/api/lab/compare", "lab_compare_history", "Past model comparisons", [], lambda c, b: {"comparisons": comparator.history(root)}),
+            ("POST", "/api/lab/compare", "lab_compare", "Ask two or more of your models the same thing and compare tokens, cost, speed and answers",
+             [("targets", A, True), ("prompt", S, True), ("repeats", I, False), ("system", S, False), ("max_tokens", I, False), ("temperature", S, False)], compare_run),
+            ("GET", "/api/lab/compare/{compare_id}", "lab_get_compare", "One saved comparison in full", [], lambda c, b, x: comparator.get(root, x)),
+            ("POST", "/api/lab/compare/{compare_id}/judge", "lab_judge_compare", "Ask one model to rank the answers (its opinion, not a measurement)", [("provider", O, True)], compare_judge),
+            ("POST", "/api/lab/compare/{compare_id}/delete", "lab_delete_compare", "Delete a saved comparison", [], lambda c, b, x: (comparator.delete(root, x), {"deleted": True})[1]),
             ("POST", "/api/lab/models/test", "lab_test_model", "Run the model test battery", [("provider", O, True)], lambda c, b: model_tests.run_battery(root, b.get("provider") or {})),
             ("GET", "/api/lab/models", "lab_models", "Models dashboard", [], lambda c, b: models.overview(root)),
             ("POST", "/api/lab/models/list", "lab_provider_models", "List the models a provider offers", [("provider", O, True)], model_list),

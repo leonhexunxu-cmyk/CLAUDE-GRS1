@@ -260,3 +260,31 @@ details > summary { cursor: pointer; color: var(--accent); font-size: .9rem; pad
 .grad-preview { color: #fff; font-weight: 600; text-align: center; padding: 18px; border-radius: 12px; margin: 6px 0 14px; }
 input[type=time], input[type=password], input[type=number] { width: 100%; font: inherit; color: var(--text); background: var(--fill); border: 0; border-radius: 10px; padding: 10px 12px; }
 html[data-theme=dark] .wframe, html[data-theme=dark] .preview { background: #1c1c1e; }
+
+/* comparator */
+table.cmp td, table.cmp th { text-align: right; white-space: nowrap; }
+table.cmp td:first-child, table.cmp th:first-child { text-align: left; color: var(--muted); font-weight: 500; white-space: normal; }
+table.cmp th { color: var(--text); font-size: .95rem; }
+table.cmp th .meta { font-weight: 400; justify-content: flex-end; }
+table.cmp td.best { color: var(--ok); font-weight: 600; background: color-mix(in srgb, var(--ok) 9%, transparent); }
+.cmpgrid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.cmpgrid > .card { margin-top: 0; }
+.answer { white-space: pre-wrap; word-break: break-word; margin-top: 10px; line-height: 1.5; max-height: 420px; overflow: auto; }
+
+/* code pad: highlight overlay, find bar, status bar, suggestions */
+.codewrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.codewrap > .hl, .codewrap > textarea { margin: 0; padding: 12px 14px 12px 6px; font: .82rem/1.6 var(--mono); tab-size: 2; white-space: pre; overflow: auto; border: 0; border-radius: 0; background: none; }
+.codewrap > .hl { position: absolute; inset: 0; pointer-events: none; color: var(--text); max-height: none; }
+.codewrap > textarea { position: relative; flex: 1; color: transparent; caret-color: var(--text); resize: none; min-height: 340px; }
+.codewrap > textarea::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: transparent; }
+.editor.wrap .codewrap > .hl, .editor.wrap .codewrap > textarea { white-space: pre-wrap; word-break: break-word; padding-left: 14px; }
+.t-kw { color: #bf5af2; } .t-str { color: #248a3d; } .t-com { color: var(--muted); font-style: italic; } .t-num { color: #c93400; } .t-fn { color: #0071e3; } .t-pun { color: var(--muted); }
+html[data-theme=dark] .t-kw { color: #d58cf7; } html[data-theme=dark] .t-str { color: #30d158; } html[data-theme=dark] .t-num { color: #ff9f0a; } html[data-theme=dark] .t-fn { color: #64d2ff; }
+.findbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; background: var(--fill); border-radius: 12px; margin-bottom: 8px; }
+.findbar input { width: auto; flex: 1; min-width: 120px; background: var(--surface); }
+.statusbar { display: flex; gap: 16px; align-items: center; font-size: .74rem; color: var(--muted); padding: 6px 4px 0; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.statusbar .meta { font-size: .74rem; }
+.tips { margin-top: 12px; background: var(--surface); border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow); }
+.tip { align-items: flex-start; gap: 10px; }
+.tip .linkish { font-size: .86rem; line-height: 1.45; }
+.tip.error .linkish b { color: var(--bad); } .tip.warn .linkish b { color: var(--warn); } .tip.info .linkish b { color: var(--muted); }

@@ -53,7 +53,8 @@ covered by a test or verified in the running app.
 | Agent swarm: an agent fetches another for help | **Done** | `ask_teammate`: the teammate answers inside the asking job's own token budget, with no tools and no nesting, so a swarm cannot run away. |
 | Multi sub-agent specialised deployment | **Partial** | Swarm (above) and rooms cover delegation and cooperation. There is no separate long-lived sub-agent process per specialist. |
 | Agent chat / rooms, cooperate like humans | **Done** | @mentions, manager opens and closes, task mode ends with a result. |
-| Agent playground, agent pad, code pad | **Done** | |
+| Agent playground, agent pad, code pad | **Done** | The code pad has syntax highlighting, smart indent, bracket and quote pairing, comment toggle, line move and duplicate, find and replace, a status bar, and live correction suggestions as you type with one-click fixes. |
+| Model comparator (same prompt, two of your models, analytics) | **Done** | Side-by-side answers with tokens in/out, cost, cost per 1k output, median latency and spread over repeated runs, tokens per second, length, and word overlap between answers. Quality ranking is a separate opt-in step by a judge model, labelled as an opinion. |
 | Project system with attributed space | **Done** | Quota per project, enforced on writes, uploads and packaging. |
 | Dedicated environments per task | **Done** | Separate working copy, scrubbed environment, network off where the machine allows it. |
 | Agents control the environment with permissions | **Done** | Variables, packages, network policy, all permissioned; turning network on always asks. |

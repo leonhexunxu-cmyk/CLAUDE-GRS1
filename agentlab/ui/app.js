@@ -27,6 +27,7 @@ const api = async (path, body) => {
   return data;
 };
 const debounce = (fn, ms = 300) => { let id; const d = (...a) => { clearTimeout(id); id = setTimeout(() => fn(...a), ms); }; d.cancel = () => clearTimeout(id); return d; };
+const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false && k !== ""));
 const chip = (text, tone = "") => h("span", { class: "chip " + tone }, text);
 const download = (name, text, type = "text/plain") => {
   const a = h("a", { href: URL.createObjectURL(new Blob([text], { type })), download: name });
@@ -328,6 +329,133 @@ function runJs(code, onLine, onDone) {
   addEventListener("message", onMsg);
   document.body.append(frame);
 }
+/* ---------- code pad: highlighting, smart editing, find/replace, run, review ---------- */
+const KW = {
+  javascript: "await async break case catch class const continue debugger default delete do else export extends finally for from function if import in instanceof let new of return static super switch this throw try typeof var void while with yield",
+  typescript: "abstract any as asserts await async boolean break case catch class const constructor continue declare default delete do else enum export extends finally for from function if implements import in instanceof interface let namespace new number of private protected public readonly return static string super switch this throw try type typeof var void while yield",
+  python: "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield match case",
+  shell: "if then else elif fi for while do done case esac function return export local readonly set unset shift source exit trap echo cd",
+  json: "true false null",
+  text: "",
+};
+const LINE_COMMENT = { javascript: "//", typescript: "//", python: "#", shell: "#", json: null, text: null };
+const PAIRS = { "(": ")", "[": "]", "{": "}", '"': '"', "'": "'", "`": "`" };
+const escHtml = (x) => x.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const TRIPLE = ['"""', "'''"];
+
+function highlight(code, lang) {
+  /* One pass over the source: strings, comments, numbers, keywords, calls. A reader's aid, not a parser. */
+  const words = new Set((KW[lang] || "").split(" ").filter(Boolean));
+  const lineC = LINE_COMMENT[lang];
+  let out = "", i = 0;
+  const push = (cls, text) => (out += cls ? `<span class="t-${cls}">${escHtml(text)}</span>` : escHtml(text));
+  while (i < code.length) {
+    const c = code[i], rest = code.slice(i);
+    if (lineC && rest.startsWith(lineC)) { const n = code.indexOf("\n", i); const stop = n < 0 ? code.length : n; push("com", code.slice(i, stop)); i = stop; continue; }
+    if ((lang === "javascript" || lang === "typescript") && rest.startsWith("/*")) { const stop = code.indexOf("*/", i + 2); const end = stop < 0 ? code.length : stop + 2; push("com", code.slice(i, end)); i = end; continue; }
+    const tri = lang === "python" ? TRIPLE.find((q) => rest.startsWith(q)) : null;
+    if (tri) { const stop = code.indexOf(tri, i + 3); const end = stop < 0 ? code.length : stop + 3; push("str", code.slice(i, end)); i = end; continue; }
+    if (c === '"' || c === "'" || c === "`") {
+      let j = i + 1;
+      while (j < code.length && code[j] !== c) { if (code[j] === "\\") j++; if (code[j] === "\n" && c !== "`") break; j++; }
+      push("str", code.slice(i, Math.min(j + 1, code.length))); i = j + 1; continue;
+    }
+    if (/[0-9]/.test(c) && !/[\w.]/.test(code[i - 1] || "")) { const m = rest.match(/^[0-9][\w.]*/)[0]; push("num", m); i += m.length; continue; }
+    if (/[A-Za-z_$@]/.test(c)) {
+      const m = rest.match(/^[\w$@]+/)[0];
+      const call = code.slice(i + m.length).match(/^\s*\(/);
+      push(words.has(m) ? "kw" : call ? "fn" : null, m); i += m.length; continue;
+    }
+    push(/[{}()[\].,;:]/.test(c) ? "pun" : null, c); i++;
+  }
+  return out + "\n";
+}
+
+/* ---------- live suggestions: a small offline checker that runs as you type ---------- */
+const OPENERS = { ")": "(", "]": "[", "}": "{" };
+function lintCode(text, lang) {
+  const out = [], lines = text.split("\n");
+  const add = (line, level, message, fix) => out.push({ line, level, message, fix });
+  // brackets and quotes, skipping strings and comments
+  const stack = [];
+  let i = 0, line = 1, inStr = null, strLine = 1, lineC = LINE_COMMENT[lang];
+  while (i < text.length) {
+    const c = text[i], two = text.slice(i, i + 2), three = text.slice(i, i + 3);
+    if (c === "\n") { line++; i++; continue; }
+    if (inStr) {
+      if (c === "\\") { i += 2; continue; }
+      if (inStr.length === 3 ? three === inStr : c === inStr) { inStr = null; i += inStr === null && three === two + text[i + 2] ? 1 : 1; }
+      else if (c === "\n") line++;
+      i++;
+      continue;
+    }
+    if (lineC && text.startsWith(lineC, i)) { const n = text.indexOf("\n", i); i = n < 0 ? text.length : n; continue; }
+    if ((lang === "javascript" || lang === "typescript") && two === "/*") { const n = text.indexOf("*/", i + 2); const stop = n < 0 ? text.length : n + 2; line += text.slice(i, stop).split("\n").length - 1; i = stop; continue; }
+    if (lang === "python" && TRIPLE.includes(three)) { inStr = three; strLine = line; i += 3; continue; }
+    if (c === '"' || c === "'" || c === "`") { inStr = c; strLine = line; i++; continue; }
+    if ("([{".includes(c)) stack.push({ c, line });
+    else if (OPENERS[c]) {
+      const top = stack.pop();
+      if (!top) add(line, "error", `Closing ${c} with nothing open.`);
+      else if (top.c !== OPENERS[c]) add(line, "error", `${c} closes a ${top.c} opened on line ${top.line}.`);
+    }
+    i++;
+  }
+  if (inStr) add(strLine, "error", "This string is never closed.");
+  stack.forEach((s) => add(s.line, "error", `${s.c} opened here is never closed.`));
+
+  lines.forEach((raw, idx) => {
+    const n = idx + 1, l = raw.trim();
+    if (raw.length > 200) add(n, "info", `Very long line (${raw.length} characters). Consider breaking it up.`);
+    if (/\s+$/.test(raw) && l) add(n, "info", "Trailing whitespace.", { find: raw, replace: raw.replace(/\s+$/, "") });
+    if (/\t/.test(raw) && lang === "python") add(n, "warn", "Tab indentation: Python mixes badly with spaces.", { find: raw, replace: raw.replace(/\t/g, "    ") });
+    if (/\b(TODO|FIXME|XXX)\b/.test(l)) add(n, "info", "Unfinished note left in the code.");
+    if (lang === "python") {
+      if (/^(if|elif|else|for|while|def|class|try|except|finally|with|match|case)\b.*[^:\s\\]$/.test(l) && !l.startsWith("#") && !/[([{,]$/.test(l) && !/^(else|try|finally)$/.test(l))
+        add(n, "error", "Missing colon at the end of this line.", { find: raw, replace: raw.replace(/\s*$/, ":") });
+      if (/^if\s+[\w.\[\]"']+\s*=\s*[^=]/.test(l)) add(n, "error", "Assignment inside if: did you mean ==?");
+      if (/^except\s*:/.test(l)) add(n, "warn", "Bare except hides real errors. Catch a specific exception.");
+      if (/^print\s+[^(=]/.test(l)) add(n, "error", "Python 3 needs print(...) with brackets.");
+      if (/\bl\s*=\s*\[\]/.test(l) && false) add(n, "info", "");
+    }
+    if (lang === "javascript" || lang === "typescript") {
+      if (/[^=!<>]==[^=]/.test(l) && !l.startsWith("//")) add(n, "warn", "Loose == compares across types. === is usually what you want.", { find: raw, replace: raw.replace(/([^=!<>])==([^=])/g, "$1===$2") });
+      if (/^\s*var\s/.test(raw)) add(n, "info", "var is function-scoped; let or const is safer.", { find: raw, replace: raw.replace(/^(\s*)var\s/, "$1let ") });
+      if (/^\s*(if|while|for)\s*\([^)]*[^=!<>]=[^=][^)]*\)/.test(raw)) add(n, "error", "Assignment inside a condition: did you mean === ?");
+      if (/\bconsole\.log\(/.test(l)) add(n, "info", "console.log left in the code.");
+      if (/\bawait\b/.test(l) && !/async/.test(text.slice(0, text.split("\n").slice(0, idx + 1).join("\n").length)) && lang !== "typescript")
+        add(n, "warn", "await outside an async function.");
+    }
+    if (lang === "shell") {
+      if (/\brm\s+-[rRf]*f/.test(l) && /\$\w+/.test(l) && !/"\$/.test(l)) add(n, "error", "Unquoted variable in an rm command: quote it, or an empty value deletes the wrong thing.");
+      if (/^\s*\w+\s*=\s/.test(raw)) add(n, "error", "No spaces around = in a shell assignment.", { find: raw, replace: raw.replace(/^(\s*\w+)\s*=\s+/, "$1=") });
+      if (/\[\s[^\]]*\s\]/.test(l) && /==/.test(l)) add(n, "info", "Inside [ ], = compares strings; == is a bashism.");
+    }
+  });
+  if (lang === "shell") {
+    const open = (text.match(/^\s*(if)\b/gm) || []).length, close = (text.match(/^\s*fi\b/gm) || []).length;
+    if (open > close) add(lines.length, "error", `${open - close} if without a matching fi.`);
+    const dos = (text.match(/^\s*(for|while|until)\b/gm) || []).length, dones = (text.match(/^\s*done\b/gm) || []).length;
+    if (dos > dones) add(lines.length, "error", `${dos - dones} loop without a matching done.`);
+  }
+  if (lang === "json" && text.trim()) {
+    try { JSON.parse(text); } catch (e) {
+      const m = /position (\d+)/.exec(e.message);
+      const at = m ? text.slice(0, +m[1]).split("\n").length : 1;
+      add(at, "error", e.message.replace(/ in JSON at position \d+.*/, "") + ".");
+    }
+  }
+  const seen = new Set();
+  return out.filter((s) => { const k = s.line + s.message; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.line - b.line || ({ error: 0, warn: 1, info: 2 }[a.level] - { error: 0, warn: 1, info: 2 }[b.level])).slice(0, 40);
+}
+
+function padStats(text, sel) {
+  const before = text.slice(0, sel);
+  return { line: before.split("\n").length, col: sel - (before.lastIndexOf("\n") + 1) + 1,
+    lines: text.split("\n").length, chars: text.length, tokens: Math.max(1, Math.round(text.length / 3.5)) };
+}
+
 function pagePad() {
   if (!pd.loaded) { pd.loaded = true; loadPads().then(async () => { if (!pd.pad && pd.pads.length) pd.pad = await api("/api/pads/" + pd.pads[0].id); if (current === "pad") renderPage(); }); }
   leave = savePad;
@@ -339,26 +467,147 @@ function pagePad() {
   else {
     const status = (pd.status = h("span", { class: "meta" }));
     const gutter = h("div", { class: "gutter", "aria-hidden": "true" });
-    const area = h("textarea", { spellcheck: "false", "aria-label": p.name, value: p.content, wrap: "off" });
+    const code = h("code");
+    const pre = h("pre", { class: "hl", "aria-hidden": "true" }, code);
+    const area = h("textarea", { spellcheck: "false", "aria-label": p.name, value: p.content, wrap: "off", autocapitalize: "off", autocomplete: "off", autocorrect: "off" });
     const out = h("div", { class: "out card", hidden: true });
-    const lines = () => { const n = area.value.split("\n").length; gutter.textContent = Array.from({ length: n }, (_, i) => i + 1).join("\n"); };
-    const changed = () => { p.content = area.value; pd.dirty = true; status.replaceChildren("…"); lines(); queueSave(); };
+    const statsBar = h("div", { class: "statusbar" });
+    const tips = h("div", { class: "tips" });
+    const jumpTo = (ln) => {
+      const pos = area.value.split("\n").slice(0, ln - 1).join("\n").length + (ln > 1 ? 1 : 0);
+      area.focus(); area.setSelectionRange(pos, pos); paint();
+    };
+    const applyFix = (s_) => {
+      const rows = area.value.split("\n");
+      if (rows[s_.line - 1] !== s_.fix.find) return toast("The line changed since that suggestion", "warn");
+      rows[s_.line - 1] = s_.fix.replace;
+      setValue(rows.join("\n"), area.value.split("\n").slice(0, s_.line).join("\n").length);
+    };
+    const lintNow = debounce(() => {
+      let found = [];
+      try { found = lintCode(area.value, p.language); } catch { found = []; }
+      const n = { error: 0, warn: 0, info: 0 };
+      found.forEach((x) => n[x.level]++);
+      fill(tips,
+        h("div", { class: "row", style: "justify-content:space-between" },
+          h("div", { class: "label", style: "margin:0" }, "Suggestions"),
+          h("div", { class: "row" }, n.error ? chip(`${n.error} to fix`, "bad") : null, n.warn ? chip(`${n.warn} to check`, "warn") : null,
+            n.info ? chip(`${n.info} tidy-up`, "mute") : null, found.length ? null : chip("nothing to flag", "ok"))),
+        found.length ? h("div", { class: "rows tight" }, found.map((s_) => h("div", { class: "kv tip " + s_.level },
+          h("button", { class: "linkish", onclick: () => jumpTo(s_.line) }, h("b", {}, `Line ${s_.line}`), " ", s_.message),
+          s_.fix ? h("button", { class: "btn plain", onclick: () => applyFix(s_) }, "Fix") : null)))
+          : h("div", { class: "meta", style: "padding:6px 0" }, "No problems found as you type. This is a quick offline check, not a full compiler."));
+    }, 350);
+    const paint = () => {
+      const n = area.value.split("\n").length;
+      gutter.textContent = Array.from({ length: n }, (_, i) => i + 1).join("\n");
+      code.innerHTML = highlight(area.value, p.language);
+      pre.scrollTop = area.scrollTop; pre.scrollLeft = area.scrollLeft;
+      const st = padStats(area.value, area.selectionStart), selLen = area.selectionEnd - area.selectionStart;
+      lintNow();
+      fill(statsBar, h("span", {}, `Ln ${st.line}, Col ${st.col}`), selLen ? h("span", {}, `${selLen} selected`) : null,
+        h("span", {}, `${st.lines} lines`), h("span", {}, `${st.chars.toLocaleString()} chars`), h("span", {}, `~${st.tokens.toLocaleString()} tokens`), h("span", { class: "grow" }), status);
+    };
+    const changed = () => { p.content = area.value; pd.dirty = true; status.textContent = "saving…"; paint(); queueSave(); };
+    const setValue = (text, a, b) => { area.value = text; area.setSelectionRange(a, b == null ? a : b); changed(); };
     area.addEventListener("input", changed);
-    area.addEventListener("scroll", () => (gutter.scrollTop = area.scrollTop));
+    area.addEventListener("scroll", () => { gutter.scrollTop = area.scrollTop; pre.scrollTop = area.scrollTop; pre.scrollLeft = area.scrollLeft; });
+    ["click", "keyup", "select"].forEach((ev) => area.addEventListener(ev, paint));
+
+    const lineRange = () => {
+      const v = area.value, a = v.lastIndexOf("\n", area.selectionStart - 1) + 1;
+      let b = v.indexOf("\n", area.selectionEnd);
+      if (b < 0) b = v.length;
+      return [a, b];
+    };
+    const indentBlock = (dedent) => {
+      const [a, b] = lineRange(), v = area.value;
+      const block = v.slice(a, b).split("\n").map((l) => (dedent ? l.replace(/^ {1,2}/, "") : "  " + l)).join("\n");
+      setValue(v.slice(0, a) + block + v.slice(b), a, a + block.length);
+    };
+    const toggleComment = () => {
+      const mark = LINE_COMMENT[p.language];
+      if (!mark) return;
+      const [a, b] = lineRange(), v = area.value, rows = v.slice(a, b).split("\n");
+      const on = rows.every((l) => !l.trim() || l.trimStart().startsWith(mark));
+      const block = rows.map((l) => (!l.trim() ? l : on ? l.replace(new RegExp("^(\\s*)" + mark.replace(/\//g, "\\/") + " ?"), "$1") : l.replace(/^(\s*)/, "$1" + mark + " "))).join("\n");
+      setValue(v.slice(0, a) + block + v.slice(b), a, a + block.length);
+    };
+    const moveLine = (dir) => {
+      const v = area.value, rows = v.split("\n"), [a] = lineRange();
+      const i = v.slice(0, a).split("\n").length - 1, j = i + dir;
+      if (j < 0 || j >= rows.length) return;
+      const keep = area.selectionStart - a;
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+      const text = rows.join("\n");
+      const pos = rows.slice(0, j).join("\n").length + (j ? 1 : 0) + keep;
+      setValue(text, pos);
+    };
+    const duplicate = () => {
+      const [a, b] = lineRange(), v = area.value, block = v.slice(a, b);
+      setValue(v.slice(0, b) + "\n" + block + v.slice(b), b + 1 + (area.selectionStart - a));
+    };
     area.addEventListener("keydown", (e) => {
-      if (e.key === "Tab") { e.preventDefault(); area.setRangeText("  ", area.selectionStart, area.selectionEnd, "end"); changed(); }
-      else if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); queueSave.cancel(); savePad(); }
-      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); run(); }
+      const meta = e.metaKey || e.ctrlKey, v = area.value, s0 = area.selectionStart, s1 = area.selectionEnd;
+      if (e.key === "Tab") { e.preventDefault(); if (s0 !== s1 || e.shiftKey) indentBlock(e.shiftKey); else setValue(v.slice(0, s0) + "  " + v.slice(s1), s0 + 2); }
+      else if (meta && e.key.toLowerCase() === "s") { e.preventDefault(); queueSave.cancel(); savePad(); }
+      else if (meta && e.key === "Enter") { e.preventDefault(); run(); }
+      else if (meta && e.key === "/") { e.preventDefault(); toggleComment(); }
+      else if (meta && e.key.toLowerCase() === "d") { e.preventDefault(); duplicate(); }
+      else if (meta && e.key.toLowerCase() === "f") { e.preventDefault(); findBar.hidden = false; findIn.focus(); findIn.select(); }
+      else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); moveLine(e.key === "ArrowUp" ? -1 : 1); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        const lineStart = v.lastIndexOf("\n", s0 - 1) + 1;
+        const indent = (v.slice(lineStart, s0).match(/^\s*/) || [""])[0];
+        const prev = v.slice(lineStart, s0).trimEnd(), next = v[s0];
+        const deeper = /[{([:]$/.test(prev) ? "  " : "";
+        if (deeper && PAIRS[prev.slice(-1)] === next) setValue(v.slice(0, s0) + "\n" + indent + deeper + "\n" + indent + v.slice(s1), s0 + 1 + indent.length + 2);
+        else setValue(v.slice(0, s0) + "\n" + indent + deeper + v.slice(s1), s0 + 1 + indent.length + deeper.length);
+      } else if (PAIRS[e.key] && !meta) {
+        e.preventDefault();
+        if (s0 !== s1) setValue(v.slice(0, s0) + e.key + v.slice(s0, s1) + PAIRS[e.key] + v.slice(s1), s0 + 1, s1 + 1);
+        else setValue(v.slice(0, s0) + e.key + PAIRS[e.key] + v.slice(s1), s0 + 1);
+      } else if (e.key === "Backspace" && s0 === s1 && PAIRS[v[s0 - 1]] === v[s0]) { e.preventDefault(); setValue(v.slice(0, s0 - 1) + v.slice(s0 + 1), s0 - 1); }
+      queueMicrotask(paint);
     });
+
+    const findIn = h("input", { type: "text", placeholder: "Find", spellcheck: "false" });
+    const replIn = h("input", { type: "text", placeholder: "Replace with", spellcheck: "false" });
+    const hits = h("span", { class: "meta" });
+    const count = () => {
+      const q = findIn.value, n = q ? area.value.split(q).length - 1 : 0;
+      hits.textContent = q ? `${n} match${n === 1 ? "" : "es"}` : "";
+      return n;
+    };
+    const findNext = () => {
+      const q = findIn.value;
+      if (!q) return;
+      let i = area.value.indexOf(q, area.selectionEnd);
+      if (i < 0) i = area.value.indexOf(q);
+      if (i < 0) return;
+      area.focus(); area.setSelectionRange(i, i + q.length); paint();
+    };
+    findIn.addEventListener("input", count);
+    findIn.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); findNext(); } if (e.key === "Escape") findBar.hidden = true; });
+    const findBar = h("div", { class: "findbar", hidden: true }, findIn, replIn, hits,
+      h("button", { class: "btn plain", onclick: findNext }, "Next"),
+      h("button", { class: "btn plain", onclick: () => { const q = findIn.value; if (!q) return; if (area.value.slice(area.selectionStart, area.selectionEnd) === q) setValue(area.value.slice(0, area.selectionStart) + replIn.value + area.value.slice(area.selectionEnd), area.selectionStart + replIn.value.length); findNext(); count(); } }, "Replace"),
+      h("button", { class: "btn plain", onclick: () => { const q = findIn.value; if (!q) return; const n = count(); setValue(area.value.split(q).join(replIn.value), 0); count(); toast(`Replaced ${n}`, "ok"); } }, "All"),
+      h("button", { class: "btn plain", onclick: () => (findBar.hidden = true) }, "Close"));
+
     const runBtn = h("button", { class: "btn", title: p.language === "javascript" ? t("run_note") : t("only_js"), disabled: p.language !== "javascript", onclick: () => run() }, t("run"));
     const run = () => {
       if (p.language !== "javascript" || runBtn.disabled) return;
       runBtn.disabled = true;
       out.hidden = false;
-      const lines_ = h("div");
-      out.replaceChildren(h("div", { class: "label" }, t("output")), lines_);
+      const lines_ = h("div"), t0 = performance.now();
+      fill(out, h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, t("output")),
+        h("div", { class: "row" }, h("button", { class: "btn plain", onclick: () => copyText([...lines_.children].map((x) => x.textContent).join("\n")) }, t("copy")),
+          h("button", { class: "btn plain", onclick: () => (out.hidden = true) }, "Hide"))), lines_);
       let any = false;
-      runJs(area.value, (d) => { any = true; lines_.append(h("div", { class: "line " + d.level }, d.text)); }, () => { if (!any) lines_.append(h("div", { class: "meta" }, t("no_output"))); runBtn.disabled = false; });
+      runJs(area.value, (d) => { any = true; lines_.append(h("div", { class: "line " + d.level }, d.text)); },
+        () => { if (!any) lines_.append(h("div", { class: "meta" }, t("no_output"))); lines_.append(h("div", { class: "meta" }, `finished in ${Math.round(performance.now() - t0)} ms`)); runBtn.disabled = false; });
     };
     const envBtn = h("button", { class: "btn plain", disabled: !["python", "shell"].includes(p.language), title: t("env_note"), onclick: async () => {
       await savePad();
@@ -366,9 +615,29 @@ function pagePad() {
       const py = p.language === "python";
       try { const rec = await api("/api/tasks", { name: p.name, command: py ? "python3 pad.py" : "sh pad.sh", files: { [py ? "pad.py" : "pad.sh"]: area.value }, network: !iso.network_isolation }); tk.selected = rec.id; tk.changes = null; await show("tasks"); } catch (e) { alert(e.message); }
     } }, t("run_env"));
+    const review = h("button", { class: "btn plain", onclick: async () => {
+      if (!area.value.trim()) return;
+      review.disabled = true;
+      out.hidden = false;
+      fill(out, h("div", { class: "label" }, "Review"), h("div", { class: "meta" }, "asking a model…"));
+      try {
+        const mine = (await lapi("/api/lab/agents")).agents.filter((a) => !a.locked);
+        const target = mine[0] ? { agent_id: mine[0].id } : { provider: { type: "mock" } };
+        const r = await lapi("/api/lab/playground/chat", { ...target, widgets: false, max_tokens: 900,
+          messages: [{ role: "user", content: `Review this ${PAD_LABEL[p.language] || p.language} code. List concrete problems with line numbers, then the smallest fix for each. Be brief.\n\n\`\`\`\n${area.value.slice(0, 20000)}\n\`\`\`` }] });
+        fill(out, h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, `Review by ${r.provider || "model"}`),
+            h("button", { class: "btn plain", onclick: () => (out.hidden = true) }, "Hide")),
+          h("div", { class: "answer" }, r.text || "(no answer)"),
+          h("div", { class: "meta" }, `${r.insights.input_tokens + r.insights.output_tokens} tokens · ${r.insights.latency_ms} ms`));
+      } catch (e) { fill(out, h("div", { class: "err" }, e.message)); }
+      review.disabled = false;
+    } }, "Review with an agent");
+
     const nameIn = h("input", { type: "text", class: "name", value: p.name, "aria-label": t("untitled"), oninput: (e) => { p.name = e.target.value; pd.dirty = true; queueSave(); } });
     const langSel = h("select", { "aria-label": t("language"), value: p.language, onchange: (e) => { p.language = e.target.value; pd.dirty = true; savePad().then(renderPage); } }, PAD_LANGS.map((l) => h("option", { value: l }, PAD_LABEL[l])));
     const copyBtn = h("button", { class: "btn plain", onclick: () => copyText(area.value, copyBtn) }, t("copy"));
+    const EXT = { javascript: "js", typescript: "ts", python: "py", shell: "sh", json: "json", text: "txt" };
+    const dlBtn = h("button", { class: "btn plain", onclick: () => download(`${(p.name || "pad").replace(/[^\w.-]+/g, "-")}.${EXT[p.language]}`, area.value) }, t("download"));
     const del = h("button", { class: "btn danger", onclick: async () => {
       if (!confirm(t("confirm_delete"))) return;
       try { await api(`/api/pads/${p.id}/delete`, {}); } catch {}
@@ -376,9 +645,12 @@ function pagePad() {
       if (pd.pads.length) pd.pad = await api("/api/pads/" + pd.pads[0].id);
       renderPage();
     } }, t("delete"));
-    right = h("div", {}, h("div", { class: "pad-top" }, nameIn, langSel, status, copyBtn, del, envBtn, runBtn),
-      h("div", { class: "editor" + (S.wrap || !S.lineNumbers ? " wrap" : "") }, gutter, area), out);
-    queueMicrotask(lines);
+    right = h("div", {}, h("div", { class: "pad-top" }, nameIn, langSel, copyBtn, dlBtn, del, review, envBtn, runBtn),
+      findBar,
+      h("div", { class: "editor" + (S.wrap || !S.lineNumbers ? " wrap" : "") }, gutter, h("div", { class: "codewrap" }, pre, area)),
+      statsBar, tips, out,
+      h("div", { class: "meta", style: "margin-top:8px" }, "Tab indents, Shift+Tab outdents, Cmd/Ctrl+/ comments, Cmd/Ctrl+D duplicates, Alt+Up/Down moves a line, Cmd/Ctrl+F finds, Cmd/Ctrl+S saves, Cmd/Ctrl+Enter runs."));
+    queueMicrotask(paint);
   }
   queueMicrotask(paintPadList);
   return [...head("pad_title", "pad_sub"), h("div", { class: "split" }, left, right)];

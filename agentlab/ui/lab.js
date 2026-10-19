@@ -93,7 +93,6 @@ const sel = (options, value, onchange, attrs = {}) => h("select", { ...attrs, on
   options.map((o) => (Array.isArray(o) ? h("option", { value: o[0], selected: String(o[0]) === String(value) }, o[1]) : h("option", { value: o, selected: String(o) === String(value) }, o))));
 const inp = (value, oninput, attrs = {}) => h("input", { type: "text", spellcheck: "false", ...attrs, value: value ?? "", oninput: (e) => oninput(attrs.type === "number" ? +e.target.value : e.target.value) });
 const tog = (checked, onchange, label) => h("label", { class: "switchrow", style: "margin:0" }, h("input", { type: "checkbox", class: "switch", checked: !!checked, onchange: (e) => onchange(e.target.checked) }), h("span", {}, label));
-const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false && k !== ""));
 const errBox = () => h("div", { class: "err", role: "alert" });
 const busy = async (btn, fn, err) => {
   if (err) err.textContent = "";
@@ -1254,3 +1253,113 @@ TABS.unshift(...NAV.slice(0, 5).flatMap(([, items]) => items));
 Object.assign(pages, { home: pageHome, agents: pageAgents, projects: pageProjects, jobs: pageJobs, schedules: pageSchedules, playground: pagePlayground, rooms: pageRooms,
   models: pageModels, training: pageTraining, knowledge: pageKnowledge, templates: pageTemplates, terminal: pageTerminal, usage: pageUsage, library: pageLibrary });
 setInterval(loadBell, 10000);
+
+/* ---------- model comparator: same prompt, two or more of your models, real numbers ---------- */
+const cmp = { targets: [{ kind: "agent", agent_id: "", pv: { preset: "mock" } }, { kind: "agent", agent_id: "", pv: { preset: "mock" } }],
+  prompt: "", system: "", repeats: 1, max_tokens: 600, temperature: "", result: null, running: false, judging: false, verdict: null, history: [] };
+const METRICS = [
+  ["total_tokens", "Tokens used", (v) => fmtN(v), "low"],
+  ["input_tokens", "In", (v) => fmtN(v), null],
+  ["output_tokens", "Out", (v) => fmtN(v), null],
+  ["cost", "Cost", money, "low"],
+  ["cost_per_1k_output", "Cost / 1k out", (v) => (v ? money(v) : "free"), "low"],
+  ["latency_ms", "Latency", (v) => `${fmtN(v)} ms`, "low"],
+  ["latency_spread_ms", "Spread (min–max)", (v, m) => `${fmtN(m.latency_min_ms)}–${fmtN(m.latency_max_ms)} ms`, "low"],
+  ["tokens_per_second", "Tokens / second", (v) => fmtN(v), "high"],
+  ["words", "Words in the answer", (v) => fmtN(v), null],
+  ["agreement", "Agreement with the others", (v) => (v == null ? "–" : `${Math.round(v * 100)}%`), null],
+];
+function pageCompare() {
+  const setup = h("div", { class: "card stack" }), out = h("div", { class: "stack" }), err = errBox();
+  const paintSetup = () => {
+    const row = (tg, i) => h("div", { class: "target" },
+      h("div", { class: "row", style: "justify-content:space-between" },
+        h("b", {}, `Model ${String.fromCharCode(65 + i)}`),
+        h("div", { class: "row", style: "flex-wrap:nowrap" }, seg([["agent", "Agent"], ["model", "Model"]], tg.kind, (v) => { tg.kind = v; paintSetup(); }, true),
+          cmp.targets.length > 2 ? h("button", { class: "btn danger", "aria-label": "Remove", onclick: () => { cmp.targets.splice(i, 1); paintSetup(); } }, "×") : null)),
+      tg.kind === "agent" ? sel(agentOpts("Choose one of your agents"), tg.agent_id, (v) => (tg.agent_id = v)) : providerEditor(tg.pv));
+    fill(setup,
+      h("div", { class: "label", style: "margin:0" }, "The models to compare"),
+      cmp.targets.map(row),
+      cmp.targets.length < 8 ? h("button", { class: "btn plain", onclick: () => { cmp.targets.push({ kind: "model", agent_id: "", pv: { preset: "mock" } }); paintSetup(); } }, "+ Add another model") : null,
+      field("The question they all get", h("textarea", { style: "min-height:90px;font-family:var(--font);font-size:.95rem", value: cmp.prompt, placeholder: "Explain what a vector database is, in three sentences.", oninput: (e) => (cmp.prompt = e.target.value) })),
+      h("details", {}, h("summary", {}, "Options"), h("div", { class: "stack gap" },
+        field("System prompt (same for all)", h("textarea", { style: "min-height:60px;font-family:var(--font)", value: cmp.system, oninput: (e) => (cmp.system = e.target.value) })),
+        h("div", { class: "optgrid" },
+          field("Ask each model this many times", inp(cmp.repeats, (v) => (cmp.repeats = v), { type: "number", min: 1, max: 5 }), "More runs give a fair latency: the median is used, and you see the spread."),
+          field("Max tokens per answer", inp(cmp.max_tokens, (v) => (cmp.max_tokens = v), { type: "number", min: 16, max: 32768 })),
+          field("Temperature", inp(cmp.temperature, (v) => (cmp.temperature = v), { type: "number", min: 0, max: 2, step: 0.1, placeholder: "default" }))))),
+      h("div", { class: "row" }, run, h("span", { class: "meta" }, `${cmp.targets.length} models · ${cmp.repeats} run${cmp.repeats > 1 ? "s" : ""} each = ${cmp.targets.length * cmp.repeats} calls`)), err);
+  };
+  const run = h("button", { class: "btn", onclick: () => busy(run, async () => {
+    cmp.verdict = null;
+    cmp.result = await lapi("/api/lab/compare", {
+      targets: cmp.targets.map((tg, i) => ({ ...targetSpec(tg), label: targetLabel(tg) || `Model ${String.fromCharCode(65 + i)}` })),
+      prompt: cmp.prompt, system: cmp.system || undefined, repeats: +cmp.repeats || 1,
+      max_tokens: +cmp.max_tokens || undefined, temperature: cmp.temperature === "" ? undefined : +cmp.temperature,
+    });
+    paintOut(); loadHistory();
+  }, err) }, "Compare");
+  const bestOf = (key, dir) => {
+    const vals = (cmp.result?.results || []).filter((r) => r.ok && r.metrics[key] != null).map((r) => r.metrics[key]);
+    if (vals.length < 2 || !dir || new Set(vals).size === 1) return null;  // a tie has no winner
+    return (dir === "low" ? Math.min : Math.max)(...vals);
+  };
+  const paintOut = () => {
+    const c = cmp.result;
+    if (!c) return fill(out, h("div", { class: "card empty" }, h("b", {}, "Pick two of your models and ask them the same thing"),
+      "You get both answers side by side, with the tokens, cost, speed and how much they agree."));
+    const ok = c.results.filter((r) => r.ok);
+    const W = [["fastest", "Fastest"], ["cheapest", "Cheapest"], ["fewest_tokens", "Fewest tokens"], ["most_concise", "Most concise"], ["most_detailed", "Most detailed"], ["steadiest", "Steadiest speed"]];
+    const judgeBtn = h("button", { class: "btn plain", onclick: () => busy(judgeBtn, async () => {
+      cmp.verdict = await lapi(`/api/lab/compare/${c.id}/judge`, { provider: toProvider(cmp.targets[0].kind === "model" ? cmp.targets[0].pv : { preset: "mock" }) });
+      paintOut();
+    }, err) }, "Ask a model to rank the answers");
+    fill(out,
+      h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, "Measured winners"),
+        h("span", { class: "meta" }, `${fmtN(c.totals.tokens)} tokens · ${money(c.totals.cost)} · ${c.totals.calls} calls`)),
+        h("div", { class: "row gap" }, W.map(([k, lab]) => (c.winners[k] ? chip(`${lab}: ${c.winners[k]}`, "ok") : null))),
+        h("div", { class: "meta gap" }, c.note)),
+      h("div", { class: "card" }, h("div", { class: "label" }, "Analytics"),
+        h("div", { class: "tablewrap" }, h("table", { class: "cmp" },
+          h("tr", {}, h("th", {}, "Measure"), ok.map((r) => h("th", {}, r.label, h("div", { class: "meta" }, r.model)))),
+          METRICS.map(([key, label, fmt, dir]) => {
+            const best = bestOf(key, dir);
+            return h("tr", {}, h("td", {}, label), ok.map((r) => {
+              const v = r.metrics[key];
+              return h("td", { class: dir && v === best && ok.length > 1 ? "best" : "" }, v == null ? "–" : fmt(v, r.metrics));
+            }));
+          }))),
+        c.repeats > 1 ? h("div", { class: "meta gap" }, `Each model answered ${c.repeats} times; latency is the median of those runs.`) : null),
+      ok.length > 1 ? h("div", { class: "card" }, h("div", { class: "label" }, "How much the answers overlap"),
+        h("div", { class: "stack" }, c.pairs.map((p) => h("div", {}, h("div", { class: "kv meta" }, h("span", {}, `${p.a} vs ${p.b}`), h("span", {}, `${Math.round(p.overlap * 100)}% shared words`)), bar(p.overlap * 100, "", "grad")))),
+        h("div", { class: "meta gap" }, "Shared vocabulary, not agreement on meaning: a low number simply means they said it differently.")) : null,
+      h("div", { class: "cmpgrid" }, c.results.map((r) => h("div", { class: "card" },
+        h("div", { class: "row", style: "justify-content:space-between" }, h("b", {}, r.label), r.ok ? h("span", { class: "meta" }, `${fmtN(r.metrics.output_tokens)} out · ${fmtN(r.metrics.latency_ms)} ms · ${money(r.metrics.cost)}`) : chip("failed", "bad")),
+        r.ok ? h("div", { class: "answer" }, r.text || "(empty answer)") : h("div", { class: "err" }, r.error),
+        r.ok && r.finish === "length" ? h("div", { class: "meta" }, chip("cut off by the token limit", "warn")) : null))),
+      h("div", { class: "card" }, h("div", { class: "row", style: "justify-content:space-between" }, h("div", { class: "label", style: "margin:0" }, "Which answer is better?"), judgeBtn),
+        cmp.verdict ? h("div", { class: "stack gap" },
+          h("div", { class: "row" }, cmp.verdict.ranking.map((l, i) => chip(`${i + 1}. ${l}`, i ? "mute" : "ok"))),
+          cmp.verdict.summary ? h("p", {}, cmp.verdict.summary) : null,
+          h("div", { class: "rows tight" }, cmp.verdict.scores.map((s_) => h("div", { class: "kv" }, h("span", {}, h("b", {}, s_.label), " ", s_.why), h("span", { class: "meta" }, `${s_.score}/10`)))),
+          h("div", { class: "meta" }, `${cmp.verdict.caveat} Judged by ${cmp.verdict.by}.`))
+          : h("div", { class: "meta gap" }, "The numbers above are measurements. Quality is a judgement: a model can give its opinion, and it will be labelled as one.")));
+  };
+  const hist = h("div", { class: "list card" });
+  const loadHistory = async () => {
+    try { cmp.history = (await lapi("/api/lab/compare")).comparisons; } catch { return; }
+    fill(hist, cmp.history.length ? cmp.history.map((x) => h("button", { onclick: async () => { cmp.result = await lapi(`/api/lab/compare/${x.id}`); cmp.verdict = null; paintOut(); } },
+      h("div", { class: "t" }, x.prompt), h("div", { class: "meta" }, x.labels.join(" vs "), ago(x.ts)),
+      h("div", { class: "meta" }, x.totals?.tokens ? `${fmtN(x.totals.tokens)} tokens` : null, x.winners?.fastest ? `fastest: ${x.winners.fastest}` : null)))
+      : h("div", { class: "empty" }, "No comparisons yet."));
+  };
+  loadLab(["agents", "presets", "secrets"]).then(() => { if (current === "compare") paintSetup(); });
+  paintSetup(); paintOut(); loadHistory();
+  return [...lhead("Compare models", "Give two or more of your models the same question. You get both answers side by side and the numbers that matter: tokens, cost, speed and how much they overlap."),
+    h("div", { class: "split" }, h("div", { class: "stack" }, setup, h("div", {}, h("div", { class: "label" }, "Earlier comparisons"), hist)), out)];
+}
+ICONS.compare = '<path d="M12 3v18M7 7H3l3.5 7L10 7H7zM21 7h-4l3.5 7L24 7"/><path d="M4 20h6M14 20h6"/>';
+NAV[1][1].push(["compare", "Compare"]);
+TABS.push(["compare", "Compare"]);
+pages.compare = pageCompare;
