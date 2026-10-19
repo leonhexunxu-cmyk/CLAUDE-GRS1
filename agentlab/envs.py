@@ -393,3 +393,53 @@ class Manager:
         rec["discarded"] = True
         self._save(rec)
         return rec
+
+
+def run_command(cwd, command, *, network=False, timeout=60, env=None, free_bytes=None, max_output=100_000, home=None, cancel=None):
+    """Run a shell command in `cwd` (an agent's workspace) with the same isolation as tasks.
+
+    Scrubbed environment (PATH/LANG/TERM/TZ + `env`), own HOME, wall-clock timeout, CPU limit, per-file size cap
+    from `free_bytes` (a soft disk quota), process-group kill, network blocked with `unshare` unless allowed.
+    Returns {"exit_code", "output", "timed_out", "truncated", "duration"}. Raises TaskError if isolation was
+    requested but is unavailable.
+    """
+    if not network and _unshare_prefix() is None:
+        raise TaskError("network isolation is not available on this machine; allow network for this project")
+    base = {k: os.environ[k] for k in ("PATH", "LANG", "TERM", "TZ") if k in os.environ}
+    base.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    if home:
+        Path(home).mkdir(parents=True, exist_ok=True)
+        base.update(HOME=str(home), TMPDIR=str(home))
+    base.update(env or {})
+    base["CI"] = "1"
+    fsize = f"ulimit -f {max(1, int(free_bytes) // 1024)}; " if free_bytes is not None else ""
+    script = f'ulimit -c 0; {fsize}ulimit -t "$1"; shift; exec /bin/sh -c "$1"'
+    argv = ([] if network else _unshare_prefix()) + ["/bin/sh", "-c", script, "sh", str(int(timeout) * 2 + 5), command]
+    start = time.time()
+    proc = subprocess.Popen(argv, cwd=cwd, env=base, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    timed_out = threading.Event()
+
+    def kill():
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+    timer = threading.Timer(timeout, lambda: (timed_out.set(), kill()))
+    timer.start()
+    if cancel is not None:  # a watcher so cancelling stops even a silent, long-running command
+        threading.Thread(target=lambda: (cancel.wait(timeout + 5), cancel.is_set() and kill()), daemon=True).start()
+    chunks, size, truncated = [], 0, False
+    try:
+        for chunk in iter(lambda: proc.stdout.read(4096), b""):
+            if size < max_output:
+                chunks.append(chunk[: max_output - size])
+            else:
+                truncated = True
+            size += len(chunk)
+        proc.wait()
+    finally:
+        timer.cancel()
+        kill()  # make sure no stragglers outlive the command
+    return {"exit_code": proc.returncode, "output": b"".join(chunks).decode("utf-8", "replace"), "timed_out": timed_out.is_set(),
+            "truncated": truncated or size > max_output, "duration": round(time.time() - start, 2)}
