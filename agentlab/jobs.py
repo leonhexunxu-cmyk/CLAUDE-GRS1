@@ -16,11 +16,11 @@ import uuid
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from . import agents, danger, envs, library, llm, memory, project_env, projects, tokenizers, usage, widgets
+from . import agents, danger, envs, knowledge, library, llm, memory, project_env, projects, tokenizers, usage, widgets
 from .hooks import data_dir
 from .recorder import append_event, load_run
 
-CATEGORY = {"list_files": "read", "read_file": "read", "write_file": "write", "delete_file": "write", "run_command": "run", "web_fetch": "network",
+CATEGORY = {"list_files": "read", "read_file": "read", "write_file": "write", "delete_file": "write", "run_command": "run", "web_fetch": "network", "search_knowledge": "read",
             "environment_info": "read", "environment_set_var": "environment", "environment_remove_var": "environment", "environment_install": "environment", "environment_network": "environment"}
 STATUSES = ("queued", "running", "waiting_approval", "succeeded", "failed", "cancelled", "stopped")
 FINAL = ("succeeded", "failed", "cancelled", "stopped")
@@ -55,6 +55,8 @@ def tool_specs(agent):
                   {"name": "environment_remove_var", "description": "Remove an environment variable from this project.", "parameters": obj({"name": s}, ["name"])},
                   {"name": "environment_install", "description": "Install Python packages into this project's virtual environment (needs network).", "parameters": obj({"packages": {"type": "array", "items": {"type": "string"}}}, ["packages"])},
                   {"name": "environment_network", "description": "Set the project's network policy: 'off' (offline) or 'allowed'. Turning it on always needs the user's approval.", "parameters": obj({"mode": s}, ["mode"])}]
+    if agent.get("knowledge"):
+        specs.append({"name": "search_knowledge", "description": "Search your knowledge bases (documents and web pages the user gave you).", "parameters": obj({"query": s}, ["query"])})
     if agent.get("memory_enabled"):
         specs += [{"name": "remember", "description": "Save a short fact you want to remember in future work.", "parameters": obj({"fact": s}, ["fact"])},
                   {"name": "recall", "description": "Search what you remember.", "parameters": obj({"query": s}, ["query"])}]
@@ -367,6 +369,13 @@ class Runtime:
         project = projects.get(self.root, job["project"])
         mem = memory.as_prompt(self.root, agent["id"], job["prompt"]) if agent["memory_enabled"] else ""
         system = agents.system_prompt(agent, project["name"], mem, skills=library.skills_prompt(self.root, agent.get("skills", [])))
+        if agent.get("knowledge"):
+            try:
+                found = knowledge.as_prompt(self.root, agent["knowledge"], job["prompt"])
+            except Exception:  # an unreachable embedding server must not stop the job
+                found = ""
+            if found:
+                system += "\n\nFrom your knowledge bases (search for more with search_knowledge):\n" + found
         tools = (tool_specs(agent) + [{k: v for k, v in t.items() if not k.startswith("_")} for t in library.plugin_tool_specs(self.root, agent.get("plugins", []))]) if agent.get("native_tools", True) else None
         messages = [{"role": "user", "content": job["prompt"]}]
         explicit = False
@@ -584,6 +593,8 @@ class Runtime:
             return "remembered", None
         if name == "recall":
             return memory.as_prompt(root, agent["id"], a["query"], 8) or "(nothing relevant)", None
+        if name == "search_knowledge":
+            return knowledge.as_prompt(root, agent.get("knowledge", []), a["query"], 6, 8000) or "(nothing relevant)", None
         raise ValueError(f"unknown tool: {name}")
 
 
