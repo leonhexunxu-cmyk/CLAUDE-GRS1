@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from . import agents, envs, llm, memory, project_env, projects, usage
+from . import agents, danger, envs, llm, memory, project_env, projects, usage
 from .hooks import data_dir
 from .recorder import append_event, load_run
 
@@ -149,7 +149,7 @@ class Runtime:
                "overrides": {k: v for k, v in (overrides or {}).items() if k in agents.CATEGORIES and v in ("allow", "ask", "deny")}, "schedule": schedule,
                "progress": {"percent": 0, "note": "", "step": 0, "max_steps": agent["limits"]["max_steps"]},
                "metrics": {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0, "tool_calls": 0, "tool_errors": 0, "approvals_asked": 0,
-                           "approvals_denied": 0, "files_written": 0, "cost": 0.0, "duration_s": 0.0},
+                           "approvals_denied": 0, "blocked": 0, "files_written": 0, "cost": 0.0, "duration_s": 0.0},
                "summary": "", "error": None, "stop_reason": None, "pending": None}
         self._save(job)
         self._cancel[job["id"]] = threading.Event()
@@ -249,7 +249,7 @@ class Runtime:
         project = projects.get(self.root, job["project"])
         mem = memory.as_prompt(self.root, agent["id"], job["prompt"]) if agent["memory_enabled"] else ""
         system = agents.system_prompt(agent, project["name"], mem)
-        tools = tool_specs(agent)
+        tools = tool_specs(agent) if agent.get("native_tools", True) else None
         messages = [{"role": "user", "content": job["prompt"]}]
         explicit = False
         for step in range(1, lim["max_steps"] + 1):
@@ -306,9 +306,21 @@ class Runtime:
 
     def _authorize(self, job, agent, call, cancel):
         """Returns (allowed, note). May block waiting for the user."""
-        verdict, cats = "allow", self._categories(call)
+        verdict, cats, risk = "allow", self._categories(call), []
+        forced = False
+        if call["name"] == "run_command":
+            level, risk = danger.decide(str(call["arguments"].get("command", "")), str(projects.workspace(self.root, job["project"])), agent.get("protection", {}).get("dangerous_commands", "standard"))
+            why = "; ".join(x["reason"] for x in risk)
+            if level == "block":
+                self._event(job, "decision", f"BLOCKED run_command (dangerous): {why}", tool="run_command")
+                job["metrics"]["blocked"] = job["metrics"].get("blocked", 0) + 1
+                return False, f"blocked for safety: {why}"
+            if level == "confirm":  # asks even in full-auto, and 'always allow' never covers it
+                verdict, forced = "ask", True
+            elif level == "warn":
+                self._event(job, "decision", f"WARNING run_command: {why}", tool="run_command")
         for c in cats:
-            if c in self._always.get(job["id"], ()):
+            if c in self._always.get(job["id"], ()) and not forced:
                 continue
             d = agents.effective(agent, c, job["overrides"])
             if _RANK[d] > _RANK[verdict]:
@@ -317,14 +329,15 @@ class Runtime:
             return True, ""
         if verdict == "deny":
             return False, f"not permitted: {'/'.join(cats)} actions are denied for this agent"
-        approval = {"id": uuid.uuid4().hex[:8], "tool": call["name"], "category": "/".join(cats), "arguments": call["arguments"], "ts": time.time()}
+        approval = {"id": uuid.uuid4().hex[:8], "tool": call["name"], "category": "/".join(cats), "arguments": call["arguments"], "ts": time.time(),
+                    "risk": [x["reason"] for x in risk if x["level"] in ("confirm", "block")]}
         w = {"id": approval["id"], "event": threading.Event(), "decision": None, "always": False}
         self._wait[job["id"]] = w
         with self._lock:
             job["status"], job["pending"] = "waiting_approval", approval
             job["metrics"]["approvals_asked"] += 1
             self._save(job)
-        self._event(job, "decision", f"ASKED {call['name']}: {json.dumps(call['arguments'])[:300]}", tool=call["name"])
+        self._event(job, "decision", f"ASKED {call['name']}: {json.dumps(call['arguments'])[:300]}" + (f" [risk: {'; '.join(approval['risk'])}]" if approval["risk"] else ""), tool=call["name"])
         self._notify("approval_needed", f"agent {job['agent_name']} is waiting for approval to use {call['name']}", {"job": job["id"], "tool": call["name"]})
         w["event"].wait(self.approval_timeout)
         self._wait.pop(job["id"], None)
@@ -334,7 +347,7 @@ class Runtime:
             if not allowed:
                 job["metrics"]["approvals_denied"] += 1
             self._save(job)
-        if w["always"] and allowed:
+        if w["always"] and allowed and not forced:
             self._always.setdefault(job["id"], set()).update(cats)
         note = "" if allowed else ("timed out waiting for approval" if w["decision"] is None and not cancel.is_set() else "denied by the user")
         self._event(job, "decision", f"{'ALLOWED' if allowed else 'DENIED'} {call['name']}" + (f" ({note})" if note else ""), tool=call["name"])

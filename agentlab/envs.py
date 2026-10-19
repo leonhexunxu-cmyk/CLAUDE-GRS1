@@ -169,6 +169,11 @@ class Manager:
         backend = spec.get("backend", "local")
         if backend not in ("local", "docker"):
             raise TaskError("backend must be local or docker")
+        if backend == "local":  # a project copy does not protect the rest of your disk, so catastrophic commands are refused
+            from . import danger
+            c = danger.classify(command)
+            if c["level"] == "block":
+                raise TaskError("blocked for safety: " + "; ".join(x["reason"] for x in c["reasons"] if x["level"] == "block") + " (use the Docker backend if you really need this)")
         network = bool(spec.get("network", False))
         if backend == "local" and not network and _unshare_prefix() is None:
             raise TaskError("network isolation is not available on this machine; allow network or use the docker backend")

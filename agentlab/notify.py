@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 from .hooks import data_dir
 
-EVENTS = ("blocked", "task_finished", "error")
+EVENTS = ("blocked", "task_finished", "error", "approval_needed", "job_finished", "import_finished", "train_finished", "schedule_paused")
 _ID = re.compile(r"^[a-f0-9]{8}$")
 
 

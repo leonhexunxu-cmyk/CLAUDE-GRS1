@@ -13,7 +13,7 @@ from .hooks import data_dir
 NAME = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 ENV_FALLBACK = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY",
                 "cloudflare_token": "CLOUDFLARE_API_TOKEN", "cloudflare_account": "CLOUDFLARE_ACCOUNT_ID",
-                "hf_token": "HF_TOKEN", "github_token": "GITHUB_TOKEN"}
+                "hf_token": "HF_TOKEN", "github_token": "GITHUB_TOKEN", "openclaw_token": "OPENCLAW_GATEWAY_TOKEN"}
 
 
 def _path(project):

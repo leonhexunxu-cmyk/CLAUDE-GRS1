@@ -167,9 +167,9 @@ class ProviderTests(unittest.TestCase):
 
     def test_every_preset_is_valid(self):
         for name, preset in llm.PRESETS.items():
-            if name == "custom":
-                continue
-            llm.validate_provider(preset)
+            filled = {**preset, "model": preset.get("model") or "some-model", "base_url": preset.get("base_url") or "http://x/v1", "url": preset.get("url") or "http://x/api",
+                      "command": [c.replace("{openclaw_agent}", "main") for c in preset.get("command", [])] or None}
+            llm.validate_provider({k: v for k, v in filled.items() if v is not None})
 
     def test_mock_script(self):
         p = llm.validate_provider({"type": "mock", "script": [{"text": "step1", "tool_calls": [{"name": "t", "arguments": {"a": 1}}]}, {"text": "done"}]})

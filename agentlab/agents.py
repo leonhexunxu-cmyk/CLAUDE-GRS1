@@ -90,6 +90,9 @@ def validate(spec, existing=None):
     instructions = str(get("instructions", ""))
     if len(instructions) > 20000:
         raise AgentError("instructions are too long (max 20,000 characters)")
+    protection = {"dangerous_commands": "standard", **(get("protection", {}) or {})}
+    if protection["dangerous_commands"] not in ("standard", "strict", "off"):
+        raise AgentError("protection.dangerous_commands must be standard, strict or off")
     evolve = get("evolve", "off")
     if evolve not in ("off", "suggest"):
         raise AgentError("evolve must be off or suggest")
@@ -99,7 +102,7 @@ def validate(spec, existing=None):
         raise AgentError(str(e))
     return {"name": name, "role": str(get("role", ""))[:200], "avatar": str(get("avatar", "🤖"))[:8] or "🤖", "provider": provider,
             "instructions": instructions, "preferences": prefs, "mode": mode, "authorizations": auth, "limits": limits,
-            "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
+            "native_tools": bool(get("native_tools", True)), "protection": {"dangerous_commands": protection["dangerous_commands"]}, "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
             "source": get("source", {"kind": "manual"})}
 
 
@@ -164,6 +167,9 @@ def public_view(rec):
 
 def system_prompt(agent, project_name, memories="", team=""):
     prefs = agent["preferences"]
+    if not agent.get("native_tools", True):  # an external agent (e.g. OpenClaw) has its own tools; just brief it
+        brief = f"You are working for the user on the project \"{project_name}\". {agent['instructions'].strip()}"
+        return "\n\n".join(p for p in [brief, f"Reply in {prefs['language']}." if prefs["language"] else "", team, f"What you remember:\n{memories}" if memories else ""] if p)
     style = {"concise": "Be brief and to the point.", "balanced": "", "detailed": "Explain your reasoning and be thorough."}[prefs["style"]]
     parts = [f"You are {agent['name']}" + (f", {agent['role']}." if agent["role"] else "."), agent["instructions"].strip(), style,
              f"Reply in {prefs['language']}." if prefs["language"] else "",

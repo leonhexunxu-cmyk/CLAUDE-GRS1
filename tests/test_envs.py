@@ -147,7 +147,7 @@ class EnvironmentTests(ProjectCase):
 
     def test_apply_refuses_protected_paths_symlinks_and_drifted_files(self):
         rec = self.run_task("echo x > .claude/settings.json; mkdir -p .github/workflows; echo y > .github/workflows/ci.yml; "
-                            "ln -s /etc/passwd link; echo z > src/new.py; echo edited >> src/a.py")
+                            "ln -s src/a.py link; echo z > src/new.py; echo edited >> src/a.py")
         paths = {c["path"]: c for c in self.mgr.changes(rec["id"])}
         self.assertNotIn("link", paths)  # symlinks are ignored entirely
         self.assertTrue(paths[".claude/settings.json"]["protected"] and paths[".github/workflows/ci.yml"]["protected"])

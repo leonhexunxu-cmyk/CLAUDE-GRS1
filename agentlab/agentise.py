@@ -28,7 +28,15 @@ def from_api(root, spec):
     preset = spec.get("preset", "custom")
     if preset not in llm.PRESETS:
         raise AgentiseError(f"preset must be one of {sorted(llm.PRESETS)}")
-    provider = {**llm.PRESETS[preset], **{k: spec[k] for k in ("base_url", "model", "key", "price_in", "price_out", "account_id") if spec.get(k) not in (None, "")}}
+    provider = {**llm.PRESETS[preset], **{k: spec[k] for k in ("base_url", "model", "key", "price_in", "price_out", "account_id", "command", "timeout") if spec.get(k) not in (None, "")}}
+    external = bool(provider.pop("external", False))
+    if spec.get("no_auth"):  # e.g. an OpenClaw Gateway or local server running with auth switched off
+        provider["key"] = ""
+    if provider.get("type") == "cli" and spec.get("openclaw_agent"):
+        agent_id = str(spec["openclaw_agent"])
+        if not agent_id.replace("-", "").replace("_", "").isalnum():
+            raise AgentiseError("the OpenClaw agent id may only contain letters, digits, - and _")
+        provider["command"] = [c.replace("{openclaw_agent}", agent_id) for c in provider["command"]]
     try:
         provider = llm.validate_provider(provider)
     except ValueError as e:
@@ -46,7 +54,7 @@ def from_api(root, spec):
             raise AgentiseError(f"the model did not answer: {result['error']}")
     fields = _agent_fields({"name": spec.get("name") or provider["model"], **spec})
     try:
-        return agents.create(root, {**fields, "provider": provider, "source": {"kind": "api", "preset": preset}})
+        return agents.create(root, {**fields, "provider": provider, "native_tools": not external, "source": {"kind": "api", "preset": preset, **({"external": True} if external else {})}})
     except agents.AgentError as e:
         raise AgentiseError(str(e))
 
