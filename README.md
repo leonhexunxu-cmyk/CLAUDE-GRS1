@@ -1,6 +1,6 @@
 # agentlab
 
-Four small, zero-dependency tools for building trustworthy AI agents. Python 3.9+.
+A local, zero-dependency lab for AI agents (Python 3.9+): build agents on any model, give them projects with their own space, let them work while you watch (or sleep), and see exactly what they did and what it cost. It started as four tools for trustworthy agents, which are still here:
 
 | Tool | What it does |
 |---|---|
@@ -22,6 +22,25 @@ agentlab status                       # what is connected
 Use your agent as normal. Every prompt, tool call and edit is recorded under `.agentlab/runs/`, and tool calls that break your rules are blocked (the hook exits with code 2 and tells the agent why). Secrets are redacted before anything is written. `agentlab disconnect <agent>` removes what `connect` added.
 
 agentlab only records in projects you have connected (those with a `.agentlab/` folder), even when an agent's hook is installed user-wide.
+
+## Agent platform (`agentlab serve`, then open the dashboard)
+
+| Area | What you get |
+|---|---|
+| **Agents on any model** | Anthropic, OpenAI, OpenRouter, Groq, Mistral, Gemini, DeepSeek, xAI, Hugging Face, Cloudflare Workers AI, Ollama, LM Studio, llama.cpp, vLLM, OpenClaw, any OpenAI-compatible URL, any HTTP API, any CLI agent, or **your own GGUF weights** (run locally on CPU or GPU, threads configurable). Models without function calling use a text tool protocol. Pick a preset role (manager, developer, reviewer, ...) or none. |
+| **Control** | Custom instructions, answer style, language, max tokens per answer, token budgets per job and per day. Modes: *ask before every action*, *ask only for risky actions*, *full auto*, plus allow/ask/deny per action type. Dangerous commands are blocked or need confirmation even in full auto. |
+| **Projects** | A private workspace per project with a space quota, file browser, uploads, environment variables, a Python venv, an offline mode, GitHub and Hugging Face import, and its own AI (model + dataset + **Train** button). |
+| **Jobs** | Background agent jobs with progress bars and metrics (tokens, cost, calls, files, approvals), approvals in the UI, a **step-through debugger** (pause before each model call or tool call, edit or skip a tool call), parallel batches (compare agents on one task, or fan out many) with a resizable parallel limit, schedules (cron or every N minutes). |
+| **Learning** | Memory, a diary written after each job, improvement proposals from lessons and your 👍/👎, **auto-improvement gated by evaluation cases** (accepted only when the score rises with no regressions), rollback, and **dream mode** (reflects during a sleep window, no tools). |
+| **Talk** | Playground: chat with any model or agent, compare models on the same prompt, attach files, per-answer tokens/speed/cost, and **widgets** (charts, tables, forms, small apps in a sandboxed frame). Rooms: several agents talk and cooperate on a goal, with a manager. |
+| **Models** | Models dashboard (usage, p50/p95 latency, cost, test results), a test battery that recommends the tool mode, model listing for OpenAI/Anthropic/compatible servers, accounts for GitHub, Hugging Face, OpenAI and Anthropic, embedding models, knowledge bases with a robots.txt-respecting web scraper. |
+| **Training** | Built-in text classifier (trains on CPU in seconds) and LoRA fine-tuning (script run in the project's venv), live loss curves, **overfit protection** (validation split, early stopping, best epoch kept, warnings), and model editing (teach a correction, rename/drop labels, undo). |
+| **Build & ship** | 14 templates (websites, games, model projects, infrastructure), "build with AI", doc builder (README, API reference from OpenAPI or code, guide, changelog), compatibility and optimisation checks, packages with installers, one-click deploy to localhost or Cloudflare Pages/Workers, a **built-in terminal**, your own /commands, skills and plugins. |
+| **Privacy & insights** | Password-protected private agents, keys stored by name (never in logs), usage by agent/model/project/kind, notifications, AI suggestions, an interactive tutorial, 6 UI languages and personalisation (themes, accents, gradients). |
+
+Everything is reachable over the local HTTP API too (`/api/lab/...`, described in `/api/openapi.json`; client libraries are generated on the API page).
+
+Honest limits: private agents protect the API and UI, not the files on disk (they are not encrypted). The terminal is your own shell, not a sandbox. LoRA training needs torch, transformers, peft and datasets installed in the project's Python environment and was tested here with a stand-in process, not a real GPU run. Cloudflare deploys need Node.js and were tested with a stand-in for wrangler. New platform screens are in English; navigation labels are translated.
 
 ## Supported agents
 
@@ -153,7 +172,7 @@ Sandbox rules, one per line: `allow read src/**`, `allow write src/ and tests/`,
 
 ## Limits
 
-Rule parsing is a small fixed grammar, not an LLM. The sandbox checks what a tool call names, so an allowed command can still read files its name doesn't reveal. Redaction and tripwire audits are heuristics. See `docs/PLAN.md` for the roadmap and known limits.
+Agent jobs and the terminal run commands as your user; isolation is a separate working folder, a scrubbed environment and (where the machine allows `unshare`) no network, not a container. Rule parsing is a small fixed grammar, not an LLM. The sandbox checks what a tool call names, so an allowed command can still read files its name doesn't reveal. Redaction and tripwire audits are heuristics. See `docs/PLAN.md` for the roadmap and known limits.
 
 ## Tests
 
