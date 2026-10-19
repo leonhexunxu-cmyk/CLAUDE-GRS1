@@ -21,6 +21,15 @@ Use Claude Code as normal. Every prompt, tool call and edit is recorded under `.
 
 Add `--with-permissions` to also merge the generated `permissions` block into `settings.json`.
 
+## MCP server (any MCP-capable agent)
+
+```
+agentlab mcp --print-config          # mcpServers JSON to paste into your agent's MCP settings
+agentlab install claude-code --with-mcp   # or write .mcp.json for Claude Code
+```
+
+Tools: `check_policy` (ask before acting), `record_note` (log a step), `plant_canaries`, `audit_answer`. MCP is cooperative: the agent decides to call these, so it can record and advise but not enforce. Use the hook or the upcoming proxy for enforcement.
+
 ## Other commands
 
 ```

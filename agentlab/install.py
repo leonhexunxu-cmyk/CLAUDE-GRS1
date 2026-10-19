@@ -9,8 +9,14 @@ EVENTS = {"SessionStart": False, "UserPromptSubmit": False, "PreToolUse": True,
           "PostToolUse": True, "Stop": False}  # event -> takes a matcher
 
 
+def base_command():
+    """(executable, leading args) that launch agentlab, preferring the installed script."""
+    return ("agentlab", []) if shutil.which("agentlab") else (sys.executable, ["-m", "agentlab"])
+
+
 def default_command():
-    return "agentlab hook" if shutil.which("agentlab") else f"{sys.executable} -m agentlab hook"
+    exe, args = base_command()
+    return " ".join([exe, *args, "hook"])
 
 
 def install_claude_code(project, command=None, policy_text=None, with_permissions=False):
@@ -40,4 +46,14 @@ def install_claude_code(project, command=None, policy_text=None, with_permission
                 perms[key] = sorted(set(perms.get(key, [])) | set(gen[key]))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def install_mcp_config(project, command=None, args=None):
+    """Merge an agentlab entry into <project>/.mcp.json (Claude Code project-scoped MCP servers)."""
+    path = Path(project) / ".mcp.json"
+    cfg = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    exe, lead = (command, args or []) if command else base_command()
+    cfg.setdefault("mcpServers", {})["agentlab"] = {"command": exe, "args": [*lead, "mcp", "--project", "."]}
+    path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     return path

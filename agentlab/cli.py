@@ -22,6 +22,11 @@ def main(argv=None):
     p.add_argument("agent", choices=["claude-code"]); p.add_argument("--project", default=".")
     p.add_argument("--policy", help="rules file to enforce"); p.add_argument("--command")
     p.add_argument("--with-permissions", action="store_true", help="also merge generated permissions into settings.json")
+    p.add_argument("--with-mcp", action="store_true", help="also register the agentlab MCP server in .mcp.json")
+
+    p = sub.add_parser("mcp", help="run the MCP server on stdio (for MCP-capable agents)")
+    p.add_argument("--project", default="."); p.add_argument("--print-config", action="store_true",
+                                                         help="print the mcpServers JSON for your client and exit")
 
     sub.add_parser("hook", help="hook entry point (reads a Claude Code event from stdin)")
 
@@ -59,6 +64,17 @@ def main(argv=None):
         from .install import install_claude_code
         text = Path(a.policy).read_text(encoding="utf-8") if a.policy else None
         print("updated", install_claude_code(a.project, a.command, text, a.with_permissions))
+        if a.with_mcp:
+            from .install import install_mcp_config
+            print("updated", install_mcp_config(a.project))
+    elif a.cmd == "mcp":
+        from . import mcp
+        if a.print_config:
+            from .install import base_command
+            exe, lead = base_command()
+            print(json.dumps({"mcpServers": {"agentlab": {"command": exe, "args": [*lead, "mcp", "--project", str(Path(a.project).resolve())]}}}, indent=2))
+        else:
+            mcp.serve(a.project)
     elif a.cmd == "hook":
         try:
             code, msg = hooks.process(json.load(sys.stdin), ".")

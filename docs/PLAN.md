@@ -11,7 +11,8 @@ Goal: make agentlab something people can plug into the coding agents they alread
 | **M2** Claude Code adapter: `agentlab hook` records events and enforces the sandbox policy; `agentlab install claude-code` merges hooks into `.claude/settings.json` | Done |
 | **M3** Local backend (`agentlab serve`): REST API, localhost only, safe against DNS rebinding and cross-site posts | Done |
 | **M4** Web dashboard: runs timeline with replay and fork, sandbox editor with live attack simulation, regression diff, tripwire audit | Done |
-| **M5** MCP server exposing `check_policy`, `record_note`, `plant_canaries`, `audit_answer` to any MCP-capable agent | Next |
+| **M5** MCP server (`agentlab mcp`) exposing `check_policy`, `record_note`, `plant_canaries`, `audit_answer` to any MCP-capable agent | Done |
+| **M6a** Verify OpenClaw and Kimi Code hook, plugin and base-URL support before building their adapters | Next |
 | **M6** Model API proxy (OpenAI-style and Anthropic-style) that records and audits any agent with a configurable base URL | Planned |
 | **M7** Transcript importers for agents that write session logs to disk | Planned |
 | **M8** Python and TypeScript SDK wrappers for the Claude Agent SDK and LangChain; publish to PyPI and npm | Planned |
@@ -38,6 +39,7 @@ Goal: make agentlab something people can plug into the coding agents they alread
 | `regress.py` | baseline comparison |
 | `tripwires.py` | canary generation and answer audit |
 | `hooks.py`, `install.py` | Claude Code adapter |
+| `mcp.py` | MCP stdio server for any MCP-capable agent |
 | `server.py`, `ui/index.html` | backend and dashboard |
 | `cli.py` | `agentlab` command |
 
@@ -46,7 +48,8 @@ Goal: make agentlab something people can plug into the coding agents they alread
 - Sandbox rules check what a tool call names. A command like `cat` on a secret passes if `cat` is allowed; shell commands with `$(...)` or backticks are blocked outright unless `allow run *`.
 - Redaction is pattern-based and will miss unusual secret formats.
 - Tripwire audits are string heuristics, a cheap signal and not proof.
-- Only Claude Code has a native adapter today. Other agents need M5 to M7; their hook and plugin support should be verified before promising integration.
+- MCP is cooperative: the agent chooses to call `check_policy` and `record_note`, so it records and advises but cannot enforce. Enforcement needs the hook (Claude Code) or the proxy (M6).
+- Only Claude Code has an enforcing adapter today. Other agents need M6 or M7; their hook and plugin support should be verified before promising integration.
 
 ## Before a public release
 
