@@ -2,7 +2,9 @@
 
 import fnmatch
 import json
+import os
 import re
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 
 
@@ -23,6 +25,17 @@ class Policy:
             if _match(action, pat, target):
                 return True, f"allowed by rule '{action} {pat}'"
         return False, "no rule allows this (deny by default)"
+
+    def check_tool(self, tool, tool_input, cwd="."):
+        """Check a Claude Code tool call. Tools the policy does not model are not governed."""
+        reqs, problem = requests_for_tool(tool, tool_input, cwd)
+        if problem and "*" not in self.run:
+            return False, problem
+        for action, target in reqs:
+            ok, why = self.check(action, target)
+            if not ok:
+                return False, f"{action} {target!r}: {why}"
+        return True, "ok"
 
     def to_claude_settings(self):
         """Emit a Claude Code .claude/settings.json permissions block."""
@@ -51,6 +64,8 @@ def _match(action, pat, target):
         return target == pat or target.endswith("." + pat)
     if action == "run":
         return target == pat or target.startswith(pat + " ")
+    if pat in (".", "./"):
+        return not target.startswith(("/", "..", "~"))
     pat = pat.rstrip("/")
     if fnmatch.fnmatch(target, pat) or target.startswith(pat + "/"):
         return True
@@ -61,6 +76,10 @@ _LINE = re.compile(
     r"^(?P<verb>allow|deny|never|only|let)\b.*?\b(?P<act>read|write|edit|run|execute|network|internet|web|access)\b\s*(?P<target>.*)$",
     re.I,
 )
+_SPLIT = re.compile(r"&&|\|\||;|\||\n")
+_UNSAFE = re.compile(r"\$\(|`|<\(|>\(")
+_REDIR = re.compile(r"(?<![0-9&])>>?\s*([^\s;&|<>]+)")
+_ENV = re.compile(r"^(?:[A-Za-z_]\w*=\S*\s+)+")
 _ACT = {"read": "read", "write": "write", "edit": "write", "run": "run", "execute": "run",
         "network": "network", "internet": "network", "web": "network", "access": "network"}
 
@@ -109,3 +128,43 @@ ATTACKS = [
 def simulate(policy, attacks=ATTACKS):
     """Return [(action, target, allowed, reason)] so you can see what would slip through."""
     return [(a, t, *policy.check(a, t)) for a, t in attacks]
+
+
+def _rel(path, cwd):
+    if os.path.isabs(path):
+        rel = os.path.relpath(path, cwd)
+        if not rel.startswith(".."):
+            path = rel
+    return os.path.normpath(path)
+
+
+def requests_for_tool(tool, tool_input, cwd="."):
+    """Map a tool call to [(action, target)] checks. Returns (requests, problem).
+
+    `problem` is set when the call cannot be verified (e.g. shell substitution).
+    Shell commands are split on && || ; | and newlines, and redirections become write checks.
+    Limit: a command may still touch files that its name does not reveal (e.g. `cat` of a secret).
+    """
+    inp = tool_input or {}
+    if tool in ("Read", "NotebookRead"):
+        return [("read", _rel(inp.get("file_path") or inp.get("notebook_path", "."), cwd))], None
+    if tool in ("Grep", "Glob"):
+        return [("read", _rel(inp.get("path") or ".", cwd))], None
+    if tool in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
+        return [("write", _rel(inp.get("file_path") or inp.get("notebook_path", "."), cwd))], None
+    if tool == "WebFetch":
+        return [("network", urlparse(inp.get("url", "")).hostname or "")], None
+    if tool == "Bash":
+        cmd = inp.get("command", "")
+        if _UNSAFE.search(cmd):
+            return [], "command uses substitution or a subshell; it cannot be verified"
+        reqs = []
+        for m in _REDIR.finditer(cmd):
+            if m.group(1) != "/dev/null":
+                reqs.append(("write", _rel(m.group(1), cwd)))
+        for seg in _SPLIT.split(cmd):
+            seg = _ENV.sub("", _REDIR.sub("", seg).strip()).strip()
+            if seg:
+                reqs.append(("run", seg))
+        return reqs, None
+    return [], None

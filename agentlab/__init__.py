@@ -11,4 +11,4 @@ __all__ = [
     "Policy", "parse_policy",
     "Tripwires",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

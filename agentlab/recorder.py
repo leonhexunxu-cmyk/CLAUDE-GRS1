@@ -5,7 +5,48 @@ import time
 import uuid
 from pathlib import Path
 
-KINDS = ("prompt", "tool_call", "tool_result", "file_edit", "decision", "output", "error")
+from .schema import KINDS, SCHEMA_VERSION, redact
+
+try:
+    import fcntl
+except ImportError:  # Windows: best effort without locking
+    fcntl = None
+
+
+def append_event(path, kind, content, run_id=None, meta=None, **fields):
+    """Append one event to a run file. Safe across processes (hooks run as separate processes).
+
+    Step numbers continue from the file's last event; a `start` event is written first if the file is new.
+    Credentials in `content` and string fields are redacted. `kind=None` only creates the start event.
+    """
+    if kind is not None and kind not in KINDS:
+        raise ValueError(f"unknown kind {kind!r}; expected one of {KINDS}")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    run_id = run_id or path.stem
+    with open(path, "a+", encoding="utf-8") as f:
+        if fcntl:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        last = None
+        for line in f:
+            if line.strip():
+                last = line
+        step = json.loads(last)["step"] if last else -1
+        out = []
+        if step < 0:
+            out.append({"step": 0, "kind": "start", "content": "", "meta": meta or {}})
+            step = 0
+        if kind is not None:
+            out.append({"step": step + 1, "kind": kind, "content": content, **fields})
+        for e in out:
+            e.update(v=SCHEMA_VERSION, run_id=run_id, ts=time.time())
+            for k, val in e.items():
+                if isinstance(val, str):
+                    e[k] = redact(val)
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
+        f.flush()
+    return out[-1]["step"]
 
 
 class Recorder:
@@ -18,27 +59,16 @@ class Recorder:
 
     def __init__(self, path, run_id=None, meta=None):
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.run_id = run_id or uuid.uuid4().hex[:8]
-        self.step = 0
-        self._f = open(self.path, "a", encoding="utf-8")
-        self._write({"step": 0, "kind": "start", "content": "", "meta": meta or {}})
-
-    def _write(self, event):
-        event.update(run_id=self.run_id, ts=time.time())
-        self._f.write(json.dumps(event, ensure_ascii=False) + "\n")
-        self._f.flush()
+        append_event(self.path, None, "", run_id=self.run_id, meta=meta)
+        self.step = len(load_run(self.path)) - 1
 
     def log(self, kind, content, **fields):
-        if kind not in KINDS:
-            raise ValueError(f"unknown kind {kind!r}; expected one of {KINDS}")
-        self.step += 1
-        self._write({"step": self.step, "kind": kind, "content": content, **fields})
+        self.step = append_event(self.path, kind, content, run_id=self.run_id, **fields)
         return self.step
 
     def close(self):
-        if not self._f.closed:
-            self._f.close()
+        pass
 
     def __enter__(self):
         return self
@@ -46,7 +76,6 @@ class Recorder:
     def __exit__(self, exc_type, exc, tb):
         if exc is not None:
             self.log("error", f"{exc_type.__name__}: {exc}")
-        self.close()
         return False
 
 
@@ -92,3 +121,22 @@ def fork_run(path, step, new_path):
                 e["meta"] = dict(e.get("meta", {}), forked_from=parent, forked_at=step)
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
     return new_id
+
+
+def summarize_run(path):
+    """One-line facts about a run for listings."""
+    events = load_run(path)
+    if not events:
+        return {"id": Path(path).stem, "events": 0}
+    meta = events[0].get("meta", {})
+    blocked = sum(1 for e in events if e["kind"] == "decision" and str(e["content"]).startswith("BLOCKED"))
+    return {
+        "id": Path(path).stem,
+        "events": len(events) - 1,
+        "started": events[0]["ts"],
+        "last": events[-1]["ts"],
+        "blocked": blocked,
+        "errors": sum(1 for e in events if e["kind"] == "error"),
+        "forked_from": meta.get("forked_from"),
+        "title": next((str(e["content"])[:80] for e in events if e["kind"] == "prompt"), ""),
+    }
