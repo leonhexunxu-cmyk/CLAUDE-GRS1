@@ -19,7 +19,7 @@ MODES = {
 DECISIONS = ("inherit", "allow", "ask", "deny")
 STYLES = ("concise", "balanced", "detailed")
 AGENT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,47}$")
-LIMIT_RANGES = {"max_output_tokens": (16, 32768, 1024), "max_steps": (1, 200, 25), "token_budget": (1000, 10_000_000, 200_000), "step_timeout": (1, 600, 60)}
+LIMIT_RANGES = {"max_output_tokens": (16, 32768, 1024), "max_steps": (1, 200, 25), "token_budget": (1000, 10_000_000, 200_000), "step_timeout": (1, 600, 60), "context_tokens": (0, 2_000_000, 0)}
 
 ROLE_TEMPLATES = {
     "coder": {"name": "Coder", "role": "Writes and fixes code", "avatar": "💻",
@@ -93,6 +93,16 @@ def validate(spec, existing=None):
     protection = {"dangerous_commands": "standard", **(get("protection", {}) or {})}
     if protection["dangerous_commands"] not in ("standard", "strict", "off"):
         raise AgentError("protection.dangerous_commands must be standard, strict or off")
+    dream = {"enabled": False, "start": "02:00", "end": "05:00", "tz_minutes": 0, "token_budget": 20000, "cycles": 2, **(get("dream", {}) or {})}
+    for k in ("start", "end"):
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(dream[k])):
+            raise AgentError(f"dream.{k} must look like 02:30")
+    try:
+        dream.update(tz_minutes=int(dream["tz_minutes"]), token_budget=int(dream["token_budget"]), cycles=int(dream["cycles"]), enabled=bool(dream["enabled"]))
+    except (TypeError, ValueError):
+        raise AgentError("dream settings must be numbers")
+    if not -840 <= dream["tz_minutes"] <= 840 or not 1000 <= dream["token_budget"] <= 1_000_000 or not 1 <= dream["cycles"] <= 5:
+        raise AgentError("dream: tz_minutes -840..840, token_budget 1000..1,000,000, cycles 1..5")
     evolve = get("evolve", "off")
     if evolve not in ("off", "suggest"):
         raise AgentError("evolve must be off or suggest")
@@ -102,7 +112,7 @@ def validate(spec, existing=None):
         raise AgentError(str(e))
     return {"name": name, "role": str(get("role", ""))[:200], "avatar": str(get("avatar", "🤖"))[:8] or "🤖", "provider": provider,
             "instructions": instructions, "preferences": prefs, "mode": mode, "authorizations": auth, "limits": limits,
-            "native_tools": bool(get("native_tools", True)), "protection": {"dangerous_commands": protection["dangerous_commands"]}, "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
+            "skills": [str(x) for x in get("skills", [])][:20], "plugins": [str(x) for x in get("plugins", [])][:20], "dream": {k: dream[k] for k in ("enabled", "start", "end", "tz_minutes", "token_budget", "cycles")}, "native_tools": bool(get("native_tools", True)), "protection": {"dangerous_commands": protection["dangerous_commands"]}, "memory_enabled": bool(get("memory_enabled", True)), "diary_enabled": bool(get("diary_enabled", False)), "evolve": evolve,
             "source": get("source", {"kind": "manual"})}
 
 
@@ -165,7 +175,7 @@ def public_view(rec):
     return {k: v for k, v in rec.items() if k != "history"} | {"history_len": len(rec.get("history", []))}
 
 
-def system_prompt(agent, project_name, memories="", team=""):
+def system_prompt(agent, project_name, memories="", team="", skills=""):
     prefs = agent["preferences"]
     if not agent.get("native_tools", True):  # an external agent (e.g. OpenClaw) has its own tools; just brief it
         brief = f"You are working for the user on the project \"{project_name}\". {agent['instructions'].strip()}"
@@ -176,5 +186,5 @@ def system_prompt(agent, project_name, memories="", team=""):
              f"You work inside the project \"{project_name}\", in a private workspace. Use your tools to list, read, write and run things there; paths are relative to the workspace and you cannot reach anything outside it. "
              "Some actions may need the user's approval; if one is denied, adapt instead of repeating it. "
              "Report progress with update_progress, and when you are finished call finish with a short summary.",
-             team, f"What you remember:\n{memories}" if memories else ""]
+             skills, team, f"What you remember:\n{memories}" if memories else ""]
     return "\n\n".join(p for p in parts if p)

@@ -2,7 +2,7 @@
 
 import time
 
-from . import agents, llm, runners, vault
+from . import agents, library, llm, runners, vault
 
 
 class AgentiseError(ValueError):
@@ -20,7 +20,12 @@ def test_provider(root, provider):
 
 
 def _agent_fields(spec):
-    return {k: spec[k] for k in ("name", "role", "avatar", "instructions", "preferences", "mode", "authorizations", "limits", "memory_enabled", "diary_enabled", "evolve") if k in spec}
+    """Agent settings from a request; a `role_preset` (manager, developer, ...) fills the gaps, explicit values win."""
+    try:
+        spec = library.apply_role({k: v for k, v in spec.items() if k != "role_preset"}, spec.get("role_preset"))
+    except library.LibraryError as e:
+        raise AgentiseError(str(e))
+    return {k: spec[k] for k in ("name", "role", "avatar", "instructions", "preferences", "mode", "authorizations", "limits", "memory_enabled", "diary_enabled", "evolve", "skills", "plugins", "protection") if k in spec}
 
 
 def from_api(root, spec):
@@ -65,15 +70,16 @@ def from_weights(root, spec, binary=None):
     name = spec.get("name") or spec["path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
     try:
         if runtime == "ollama":
-            provider, source = runners.ollama_create(root, spec["project_id"], spec["path"], name, binary=binary), {"kind": "weights", "runtime": "ollama", "path": spec["path"]}
+            provider, source = runners.ollama_create(root, spec["project_id"], spec["path"], name, binary=binary, device=spec.get("device", "auto"), threads=spec.get("threads")), {"kind": "weights", "runtime": "ollama", "path": spec["path"]}
             runner = None
         elif runtime == "llama-server":
-            runner = runners.start(root, spec["project_id"], spec["path"], name=name, ctx=spec.get("ctx", 4096), binary=binary)
+            runner = runners.start(root, spec["project_id"], spec["path"], name=name, ctx=spec.get("ctx", 4096), binary=binary, device=spec.get("device", "auto"), threads=spec.get("threads"))
             provider, source = runners.provider_for(runner), {"kind": "weights", "runtime": "llama-server", "path": spec["path"], "runner": runner["id"]}
             if spec.get("wait"):
                 runners.wait_ready(root, runner, timeout=float(spec["wait"]))
         else:
             raise AgentiseError("runtime must be llama-server or ollama")
+        provider = {**provider, "compute": {"device": spec.get("device", "auto"), "threads": spec.get("threads")}, **({"tokenizer": spec["tokenizer"]} if spec.get("tokenizer") else {})}
         agent = agents.create(root, {**_agent_fields({"name": name, **spec}), "provider": provider, "source": source})
     except (runners.RunnerError, agents.AgentError) as e:
         raise AgentiseError(str(e))

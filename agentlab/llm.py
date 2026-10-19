@@ -18,7 +18,7 @@ import uuid
 import urllib.error
 import urllib.request
 
-from . import vault
+from . import tokenizers, vault
 
 PRESETS = {
     "anthropic": {"type": "anthropic", "base_url": "https://api.anthropic.com", "model": "claude-sonnet-5-5", "key": "anthropic", "label": "Anthropic"},
@@ -63,6 +63,15 @@ def validate_provider(p):
            "price_in": float(p.get("price_in") or 0), "price_out": float(p.get("price_out") or 0), "label": str(p.get("label", ""))[:60]}
     if out["max_tokens_param"] not in ("max_tokens", "max_completion_tokens"):
         raise ValueError("invalid max_tokens_param")
+    try:
+        out["tokenizer"] = tokenizers.validate_spec(p.get("tokenizer"))
+    except ValueError as e:
+        raise ValueError(str(e))
+    comp = p.get("compute") or {}
+    device, threads = comp.get("device", "auto"), comp.get("threads")
+    if device not in ("auto", "cpu", "gpu") or (threads not in (None, "") and not 1 <= int(threads) <= 256):
+        raise ValueError("provider.compute: device must be auto, cpu or gpu, and threads 1-256")
+    out["compute"] = {"device": device, "threads": int(threads) if threads not in (None, "") else None}
     out["tool_mode"] = p.get("tool_mode") or ("prompt" if out["type"] in ("cli", "http") else "native")
     if out["tool_mode"] not in ("native", "prompt"):
         raise ValueError("provider.tool_mode must be native or prompt")
@@ -191,11 +200,12 @@ def _post(url, headers, body, timeout, retries, backoff):
             raise LLMError("the server did not return valid JSON") from None
 
 
-def _tokens(text):
-    return max(1, len(text) // 4)
+def _tokens(text, provider=None, project="."):
+    """Token count for text: the provider's chosen tokenizer (a preset estimate or an exact tokenizer file)."""
+    return max(1, tokenizers.count(text, (provider or {}).get("tokenizer"), project))
 
 
-def _mock(provider, messages, tools):
+def _mock(provider, messages, tools, project="."):
     """Scripted replies (provider['script']) cycled per assistant turn; default is a harmless demo."""
     turn = sum(1 for m in messages if m["role"] == "assistant")
     script = provider.get("script")
@@ -208,7 +218,7 @@ def _mock(provider, messages, tools):
         text = "This is the demo model. Add a provider (Anthropic, OpenAI, Ollama, ...) to run a real agent."
         calls = [{"id": f"m{turn}", "name": "finish", "arguments": {"summary": text}}] if "finish" in names and turn == 0 else []
     last = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-    return {"text": text, "tool_calls": calls, "usage": {"input": _tokens(last) + 20, "output": _tokens(text) + 5}, "stop": "tool" if calls else "end", "model": "mock"}
+    return {"text": text, "tool_calls": calls, "usage": {"input": _tokens(last, provider, project) + 20, "output": _tokens(text, provider, project) + 5}, "stop": "tool" if calls else "end", "model": "mock"}
 
 
 def _transcript(system, messages):
@@ -219,7 +229,7 @@ def _transcript(system, messages):
     return "\n\n".join(parts)
 
 
-def _cli(provider, system, messages):
+def _cli(provider, system, messages, project="."):
     """An external agent run as a command (e.g. `openclaw agent`): the conversation goes in, its stdout comes back."""
     text = _transcript(system, messages)
     fd, path = tempfile.mkstemp(prefix="agentlab-msg-", suffix=".txt")
@@ -238,7 +248,7 @@ def _cli(provider, system, messages):
     if r.returncode != 0:
         raise LLMError(f"{argv[0]} exited with {r.returncode}: {(r.stderr or r.stdout).strip()[-300:]}")
     out = r.stdout.strip()
-    return {"text": out, "tool_calls": [], "usage": {"input": _tokens(text), "output": _tokens(out)}, "stop": "end", "model": provider["model"]}
+    return {"text": out, "tool_calls": [], "usage": {"input": _tokens(text, provider, project), "output": _tokens(out, provider, project)}, "stop": "end", "model": provider["model"]}
 
 
 def _fill(node, values):
@@ -303,7 +313,7 @@ def _http(provider, system, messages, max_tokens, project, retries, backoff):
         text = text if isinstance(text, str) else json.dumps(text)
     else:
         text = raw.strip()
-    usage = {"input": _tokens(values["{prompt}"]), "output": _tokens(text)}
+    usage = {"input": _tokens(values["{prompt}"], provider, project), "output": _tokens(text, provider, project)}
     try:
         parsed = json.loads(raw)
         for k, path in (("input", provider["usage_in_path"]), ("output", provider["usage_out_path"])):
@@ -347,7 +357,7 @@ def chat(provider, system, messages, tools=None, max_tokens=1024, temperature=No
     """Send one request; returns a Reply dict. Raises LLMError. Works with any model: native tool calling where the
     API has it, a text protocol where it does not."""
     if provider["type"] == "mock":
-        return _mock(provider, messages, tools)
+        return _mock(provider, messages, tools, project)
     if tools and provider.get("tool_mode", "native") == "prompt":
         sys2, msgs2 = _prompt_tools(system, messages, tools)
         return _parse_tool_text(_dispatch(provider, sys2, msgs2, None, max_tokens, temperature, project, timeout, retries, backoff))
@@ -356,7 +366,7 @@ def chat(provider, system, messages, tools=None, max_tokens=1024, temperature=No
 
 def _dispatch(provider, system, messages, tools, max_tokens, temperature, project, timeout, retries, backoff):
     if provider["type"] == "cli":
-        return _cli(provider, system, messages)
+        return _cli(provider, system, messages, project)
     if provider["type"] == "http":
         return _http(provider, system, messages, max_tokens, project, retries, backoff)
     key = vault.get_secret(project, provider.get("key"))

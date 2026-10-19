@@ -88,7 +88,7 @@ def provider_for(rec):
     return {"type": "openai", "base_url": f"http://127.0.0.1:{rec['port']}/v1", "model": rec["alias"], "key": "", "label": f"{rec['name']} (local weights)"}
 
 
-def start(root, project_id, rel_path, *, name=None, ctx=4096, port=None, binary=None):
+def start(root, project_id, rel_path, *, name=None, ctx=4096, port=None, binary=None, device="auto", threads=None):
     ws_file = projects.resolve(root, project_id, rel_path)
     if not ws_file.is_file():
         raise RunnerError("weights file not found in the project", 404)
@@ -101,15 +101,26 @@ def start(root, project_id, rel_path, *, name=None, ctx=4096, port=None, binary=
     if not ALIAS.match(alias):
         raise RunnerError("could not make a valid model name")
     ctx = max(256, min(int(ctx), 131072))
+    if device not in ("auto", "cpu", "gpu"):
+        raise RunnerError("device must be auto, cpu or gpu")
+    if threads not in (None, "") and not 1 <= int(threads) <= 256:
+        raise RunnerError("threads must be 1-256")
     port = int(port or _free_port())
     rid = uuid.uuid4().hex[:8]
     log = data_dir(root) / "runners" / f"{rid}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "wb") as lf:
-        proc = subprocess.Popen([binary, "-m", str(ws_file), "--host", "127.0.0.1", "--port", str(port), "-c", str(ctx), "--alias", alias],
+        argv = [binary, "-m", str(ws_file), "--host", "127.0.0.1", "--port", str(port), "-c", str(ctx), "--alias", alias]
+        if device == "cpu":
+            argv += ["-ngl", "0"]  # keep every layer on the CPU
+        elif device == "gpu":
+            argv += ["-ngl", "99"]  # offload as many layers as fit on the GPU
+        if threads not in (None, ""):
+            argv += ["-t", str(int(threads))]
+        proc = subprocess.Popen(argv,
                                 stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
     rec = {"id": rid, "name": name, "alias": alias, "runtime": "llama-server", "project": project_id, "path": rel_path, "port": port, "pid": proc.pid,
-           "ctx": ctx, "status": "starting", "started": time.time(), "log": str(log)}
+           "ctx": ctx, "status": "starting", "started": time.time(), "log": str(log), "device": device, "threads": int(threads) if threads not in (None, "") else None}
     data = _load(root)
     data[rid] = rec
     _save(root, data)
@@ -172,7 +183,7 @@ def stop(root, rid):
     return rec
 
 
-def ollama_create(root, project_id, rel_path, name, binary=None):
+def ollama_create(root, project_id, rel_path, name, binary=None, device="auto", threads=None):
     """Register a GGUF file with Ollama (`ollama create`) and return the provider for it."""
     ws_file = projects.resolve(root, project_id, rel_path)
     if not ws_file.is_file():
@@ -185,7 +196,8 @@ def ollama_create(root, project_id, rel_path, name, binary=None):
     if not ALIAS.match(name):
         raise RunnerError("invalid model name")
     modelfile = ws_file.parent / f"Modelfile.{name}"
-    modelfile.write_text(f"FROM ./{ws_file.name}\n", encoding="utf-8")
+    lines = [f"FROM ./{ws_file.name}"] + (["PARAMETER num_gpu 0"] if device == "cpu" else []) + ([f"PARAMETER num_thread {int(threads)}"] if threads not in (None, "") else [])
+    modelfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
     r = subprocess.run([binary, "create", name, "-f", str(modelfile)], cwd=ws_file.parent, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:
         raise RunnerError(f"ollama create failed: {(r.stderr or r.stdout).strip()[-300:]}")

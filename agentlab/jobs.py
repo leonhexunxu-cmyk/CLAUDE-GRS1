@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from . import agents, danger, envs, llm, memory, project_env, projects, usage
+from . import agents, danger, envs, library, llm, memory, project_env, projects, tokenizers, usage
 from .hooks import data_dir
 from .recorder import append_event, load_run
 
@@ -237,8 +237,14 @@ class Runtime:
             except Exception:
                 pass
 
-    def _compact(self, messages):
-        if sum(len(m.get("content") or "") for m in messages) < 300_000:
+    def _compact(self, messages, provider=None, context_tokens=0):
+        """Trim old tool output when the conversation gets too big: by tokens against the agent's context window (using its
+        tokenizer), or by size when no window is set."""
+        if context_tokens:
+            count = tokenizers.load(self.root, (provider or {}).get("tokenizer"))
+            if sum(count(m.get("content") or "") for m in messages) < int(context_tokens * 0.8):
+                return
+        elif sum(len(m.get("content") or "") for m in messages) < 300_000:
             return
         for m in messages[:-8]:
             if m["role"] == "tool" and len(m["content"]) > 200:
@@ -248,8 +254,8 @@ class Runtime:
         lim, provider = agent["limits"], agent["provider"]
         project = projects.get(self.root, job["project"])
         mem = memory.as_prompt(self.root, agent["id"], job["prompt"]) if agent["memory_enabled"] else ""
-        system = agents.system_prompt(agent, project["name"], mem)
-        tools = tool_specs(agent) if agent.get("native_tools", True) else None
+        system = agents.system_prompt(agent, project["name"], mem, skills=library.skills_prompt(self.root, agent.get("skills", [])))
+        tools = (tool_specs(agent) + [{k: v for k, v in t.items() if not k.startswith("_")} for t in library.plugin_tool_specs(self.root, agent.get("plugins", []))]) if agent.get("native_tools", True) else None
         messages = [{"role": "user", "content": job["prompt"]}]
         explicit = False
         for step in range(1, lim["max_steps"] + 1):
@@ -264,7 +270,7 @@ class Runtime:
             if not explicit:
                 job["progress"]["percent"] = min(90, int(100 * (step - 1) / lim["max_steps"]))
             self._save(job)
-            self._compact(messages)
+            self._compact(messages, provider, lim.get("context_tokens", 0))
             t0 = time.time()
             try:
                 reply = llm.chat(provider, system, messages, tools, max_tokens=lim["max_output_tokens"], temperature=lim["temperature"], project=self.root)
@@ -298,15 +304,22 @@ class Runtime:
         self._finish(job, "stopped", stop_reason=f"step limit reached ({lim['max_steps']} steps)")
 
     # ---- tools ----
-    def _categories(self, call):
+    def _plugin(self, agent, name):
+        return next((t for t in library.plugin_tool_specs(self.root, agent.get("plugins", [])) if t["name"] == name), None)
+
+    def _categories(self, call, agent=None):
         cats = [CATEGORY[call["name"]]] if call["name"] in CATEGORY else []
+        if not cats and agent is not None:
+            pl = self._plugin(agent, call["name"])
+            if pl:
+                cats = [pl["_category"]]
         if call["name"] == "run_command" and call["arguments"].get("network"):
             cats.append("network")
         return cats
 
     def _authorize(self, job, agent, call, cancel):
         """Returns (allowed, note). May block waiting for the user."""
-        verdict, cats, risk = "allow", self._categories(call), []
+        verdict, cats, risk = "allow", self._categories(call, agent), []
         forced = False
         if call["name"] == "run_command":
             level, risk = danger.decide(str(call["arguments"].get("command", "")), str(projects.workspace(self.root, job["project"])), agent.get("protection", {}).get("dangerous_commands", "standard"))
@@ -359,7 +372,7 @@ class Runtime:
         job["metrics"]["tool_calls"] += 1
         self._event(job, "tool_call", f"{name} {json.dumps(args, ensure_ascii=False)[:300]}", tool=name)
         try:
-            if name not in tool_names(agent):
+            if name not in tool_names(agent) and not self._plugin(agent, name):
                 raise ValueError(f"unknown tool: {name}")
             if "_invalid_json" in args:
                 raise ValueError("your arguments were not valid JSON; try again")
@@ -378,6 +391,13 @@ class Runtime:
     def _execute(self, job, agent, name, a, cancel=None):
         root, pid = self.root, job["project"]
         lim = agent["limits"]
+        pl = self._plugin(agent, name)
+        if pl:
+            plugin = library.get_plugin(root, pl["_plugin"])
+            try:
+                return library.run_plugin(root, pid, plugin, a, cancel=cancel, timeout=lim["step_timeout"]), None
+            except library.LibraryError as e:
+                raise ValueError(str(e))
         if name == "list_files":
             path = str(a.get("path", ".") or ".")
             if path in (".", "./", ""):
