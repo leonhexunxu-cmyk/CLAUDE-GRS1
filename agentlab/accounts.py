@@ -11,7 +11,9 @@ from .hooks import data_dir
 
 GITHUB_API = "https://api.github.com"
 HF_API = "https://huggingface.co"
-SERVICES = {"github": "github_token", "huggingface": "hf_token"}
+OPENAI_API = "https://api.openai.com/v1"
+ANTHROPIC_API = "https://api.anthropic.com"
+SERVICES = {"github": "github_token", "huggingface": "hf_token", "openai": "openai", "anthropic": "anthropic"}
 
 
 class AccountError(ValueError):
@@ -58,9 +60,12 @@ def connect(root, service, token):
     if service == "github":
         data = _get_json(f"{GITHUB_API}/user", _gh_headers(token))
         who = {"name": data.get("login", ""), "display": data.get("name") or ""}
-    else:
+    elif service == "huggingface":
         data = _get_json(f"{HF_API}/api/whoami-v2", {"Authorization": f"Bearer {token}"})
         who = {"name": data.get("name", ""), "display": data.get("fullname") or data.get("type", "")}
+    else:  # OpenAI / Anthropic keys do not say who they belong to; a successful model listing proves they work
+        models = _list(service, token)
+        who = {"name": f"{service} key", "display": f"{len(models)} models available"}
     if not who["name"]:
         raise AccountError("the service did not say who this token belongs to")
     vault.set_secret(root, SERVICES[service], token)
@@ -112,3 +117,31 @@ def hf_search(root, kind, query, limit=20):
     items = _get_json(url, {"Authorization": f"Bearer {token}"} if token else None)
     return [{"id": r.get("id") or r.get("modelId"), "downloads": r.get("downloads", 0), "likes": r.get("likes", 0), "task": r.get("pipeline_tag") or "",
              "tags": (r.get("tags") or [])[:6], "private": bool(r.get("private")), "gated": bool(r.get("gated"))} for r in items]
+
+
+def _list(service, token, base=None):
+    if service == "anthropic":
+        data = _get_json(f"{(base or ANTHROPIC_API).rstrip('/')}/v1/models?limit=100", {"x-api-key": token, "anthropic-version": "2023-06-01"})
+        return [{"id": m["id"], "name": m.get("display_name") or m["id"], "created": m.get("created_at", "")} for m in data.get("data", [])]
+    data = _get_json(f"{(base or OPENAI_API).rstrip('/')}/models", {"Authorization": f"Bearer {token}"} if token else None)
+    items = data.get("data", data.get("models", [])) if isinstance(data, dict) else data
+    return sorted(({"id": m.get("id") or m.get("name"), "name": m.get("id") or m.get("name"), "owned_by": m.get("owned_by", "")} for m in items if isinstance(m, dict) and (m.get("id") or m.get("name"))), key=lambda m: m["id"])
+
+
+def list_models(root, provider):
+    """Models a provider offers, so you can pick the model name instead of typing it. Works for Anthropic and
+    any OpenAI-compatible server (OpenAI, OpenRouter, Groq, Mistral, Ollama, LM Studio, vLLM, llama.cpp ...)."""
+    kind = provider.get("type")
+    if kind not in ("anthropic", "openai"):
+        raise AccountError("model listing works for anthropic and OpenAI-compatible providers")
+    token = vault.get_secret(root, provider.get("key")) if provider.get("key") else None
+    if provider.get("key") and not token:
+        raise AccountError(f"no API key named '{provider['key']}'")
+    base = provider.get("base_url")
+    if kind == "anthropic":
+        return _list("anthropic", token, base)
+    if not str(base or "").startswith(("http://", "https://")):
+        raise AccountError("a base_url is needed")
+    if "{account_id}" in base:
+        raise AccountError("Cloudflare Workers AI does not list models here; see developers.cloudflare.com/workers-ai/models")
+    return _list("openai", token, base)
